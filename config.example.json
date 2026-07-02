@@ -1,0 +1,30 @@
+{
+  "base_web": "http://10.70.33.19/biz",
+  "base_api": "http://10.70.33.19/biz/api.php/v1",
+  "account_env": "ZENTAO_ACCOUNT",
+  "password_env": "ZENTAO_PASSWORD",
+  "project_id": 1292,
+  "executions": {
+    "review": {
+      "id": 1708,
+      "name": "智慧Git代码审查管理系统",
+      "product_id": 654
+    },
+    "zentao_ai": {
+      "id": 2826,
+      "name": "禅道AI建设",
+      "product_id": 223
+    },
+    "assistant": {
+      "id": 3248,
+      "name": "研发AI助理及知识库",
+      "product_id": 223
+    },
+    "sop": {
+      "id": 4058,
+      "name": "SOP文档生成系统",
+      "product_id": 654
+    }
+  }
+}
+

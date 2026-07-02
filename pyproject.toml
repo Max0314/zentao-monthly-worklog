@@ -1,0 +1,13 @@
+[project]
+name = "zentao-tool"
+version = "0.1.0"
+description = "Codex worklog to ZenTao task and bug recorder"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+zentao-tool = "zentao_tool.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

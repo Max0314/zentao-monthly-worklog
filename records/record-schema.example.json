@@ -1,0 +1,30 @@
+{
+  "month": "2026-07",
+  "project_id": 1292,
+  "tasks": [
+    {
+      "execution": 4058,
+      "title": "任务标题",
+      "detail": "【任务详细描述】内容",
+      "comments": [
+        "【任务完成步骤】第一条备注",
+        "【任务完成步骤】第二条备注"
+      ],
+      "estimate": 3
+    }
+  ],
+  "bugs": [
+    {
+      "execution": 4058,
+      "product": 654,
+      "title": "Bug标题",
+      "detail": "【bug详细描述】内容",
+      "comments": [
+        "【bug解决步骤】验证问题：...",
+        "【bug解决步骤】查找问题点：...",
+        "【伪代码】..."
+      ]
+    }
+  ]
+}
+
