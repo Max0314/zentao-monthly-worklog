@@ -40,6 +40,7 @@ def build_draft(evidence: dict[str, Any], settings) -> dict[str, Any]:
         "stories": [],
         "tasks": [],
         "bugs": [],
+        "bug_candidates": [],
         "unclassified": [],
     }
     groups: dict[tuple[int, str], dict[str, Any]] = {}
@@ -84,7 +85,7 @@ def build_draft(evidence: dict[str, Any], settings) -> dict[str, Any]:
                     "key": f"{month}-{repo_key}-task",
                     "execution": int(execution["id"]),
                     "title": f"完善 {display_name} 本月功能与工程能力",
-                    "detail": "【任务详细描述】结合本月 Codex 对话与 Git 变更，完成："
+                    "detail": "【任务详细描述】结合本月 AI 对话与 Git 变更，完成："
                     + "；".join(subjects),
                     "comments": [
                         f"【任务完成步骤】梳理 {display_name} 本月需求与提交记录，明确实现范围和验收口径。",
@@ -96,29 +97,16 @@ def build_draft(evidence: dict[str, Any], settings) -> dict[str, Any]:
                 }
             )
 
-        title_counts: dict[str, int] = {}
         for commit in fixes:
             files = [item.get("path") for item in commit.get("files", []) if item.get("path")]
             subject = commit["subject"]
-            title_counts[subject] = title_counts.get(subject, 0) + 1
-            title = subject
-            if title_counts[subject] > 1:
-                title = f"{subject}（提交 {commit['hash'][:8]}）"
-            draft["bugs"].append(
+            draft["bug_candidates"].append(
                 {
-                    "key": f"{month}-{repo_key}-bug-{commit['hash'][:8]}",
                     "execution": int(execution["id"]),
                     "product": product_id,
-                    "title": title,
-                    "detail": f"【bug详细描述】{subject}。依据提交 {commit['hash'][:12]} 及相关对话记录整理。",
-                    "comments": [
-                        f"【bug解决步骤】验证问题：结合复现现象与提交记录确认 {subject}。",
-                        "【bug解决步骤】查找问题点：定位到 " + "、".join(files[:6]) + "。",
-                        "【bug解决步骤】分析过程：核对输入、状态流转和边界条件，确认异常触发路径。",
-                        "【bug解决步骤】解决过程：调整对应实现并补充异常分支和兼容处理。",
-                        "【bug解决步骤】回归验证：执行相关测试并确认正常场景与异常场景均符合预期。",
-                        "【伪代码】读取输入 -> 校验边界 -> 执行业务逻辑 -> 处理异常 -> 验证输出。",
-                    ],
+                    "title": subject,
+                    "files": files[:6],
+                    "reason": "Commit message suggests a fix; inspect conversation evidence before promoting to a resolved Bug.",
                     "sources": [commit["hash"]],
                 }
             )

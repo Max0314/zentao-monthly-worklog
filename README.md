@@ -95,6 +95,7 @@ python -m zentao_tool.cli ping
 
 ```powershell
 python -m zentao_tool.cli collect 2026-07
+python -m zentao_tool.cli inspect-evidence output\2026-07\evidence.json --repository bi_center --query 测试 --query 部署
 python -m zentao_tool.cli draft output\2026-07\evidence.json
 python -m zentao_tool.cli validate output\2026-07\draft.json
 python -m zentao_tool.cli preview output\2026-07\draft.json
@@ -103,6 +104,15 @@ python -m zentao_tool.cli verify records\manifests\2026-07-formal_auto.json
 ```
 
 `upload` 会显示完整清单，只有输入大写 `YES` 才写入。已确认的自动化场景可加 `--yes`。同一 manifest 重跑时会跳过已完成记录；禅道已有同迭代同标题记录时也会防止重复创建。
+
+默认 `collect` 生成紧凑证据：
+
+- `evidence.json` 只包含会话首尾摘要、测试/部署/修复信号和明细路径。
+- 完整的用户消息与最终答复保存在 `details/sessions/`，不会丢失。
+- Git 提交在采集阶段按 commit hash 去重，同一仓库的多个 worktree 自动归并。
+- `draft` 中的 `bug_candidates` 只是待核实索引，不会再把所有 `fix:` 提交伪装成已解决 Bug。
+
+需要核实具体上下文时，使用一次有字符预算的 `inspect-evidence`，不要让 Agent 逐个打开所有会话。只有明确进行取证或调试时才使用 `collect --full`。
 
 推荐让 Codex 使用本仓库提供的 `$zentao-monthly-worklog` Skill 完成证据分析和草稿润色，而不是直接采用基础 `draft` 命令生成的机械草稿。
 

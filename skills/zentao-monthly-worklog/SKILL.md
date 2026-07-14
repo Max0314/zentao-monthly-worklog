@@ -21,13 +21,14 @@ Use the installed `zentao_tool` Python package as the deterministic collection a
 ## Workflow
 
 1. Run `python -m zentao_tool.cli show-config` and confirm the selected user configuration and workspace.
-2. Run `python -m zentao_tool.cli collect YYYY-MM` to create `output/YYYY-MM/evidence.json`. Add `--context`, `--department`, or `--work-description` when Codex records are absent or incomplete.
-3. Read the evidence and analyze both sources:
-   - Use Codex user requests and final answers to recover intent, implementation steps, validation, and resolved symptoms.
+2. Run `python -m zentao_tool.cli collect YYYY-MM` with a timeout of at least 60 seconds. It creates compact `output/YYYY-MM/evidence.json` plus complete extracted messages under `output/YYYY-MM/details/sessions/`. Add `--context`, `--department`, or `--work-description` when Codex records are absent or incomplete. Do not use `--full` for routine monthly work.
+3. Read only the compact evidence first:
+   - Use `stats` for source counts and deduplication totals; Git commits are already unique by hash and worktrees are already merged into repository families.
+   - Use sampled `codex_sessions[].turns`, `signals`, and mapped repositories to recover likely intent, results, tests, deployments, and pending work.
    - Treat `external_contexts` as additional AI exports or user-supplied work evidence.
-   - Use Git commits and changed files to confirm scope, repositories, implementation evidence, and project ownership.
-   - Deduplicate commits repeated across worktrees by commit hash.
-4. Run `python -m zentao_tool.cli draft output/YYYY-MM/evidence.json` for a baseline, then rewrite `output/YYYY-MM/draft.json` using the rules below.
+   - Do not open every detail file or repeatedly parse the evidence with many small shell commands.
+   - When a fact needs confirmation, batch the relevant sessions into one `inspect-evidence` call. Keep the default 30,000-character budget or lower; normally inspect no more than 2-6 sessions per business objective.
+4. Run `python -m zentao_tool.cli draft output/YYYY-MM/evidence.json` for a baseline. Entries in `bug_candidates` are not resolved Bugs; promote only candidates supported by symptom, diagnosis/fix, and validation evidence. Rewrite `output/YYYY-MM/draft.json` once after decisions are settled; avoid placeholder records and repeated whole-file patches.
 5. Run `validate` and `preview`. Show the complete proposed story/task/bug list to the user before any upload unless the user explicitly authorized the complete list in the current request.
 6. After confirmation, run `upload` with `formal_auto` or an explicit environment and a dedicated manifest. Do not replace this command with ad hoc REST calls; it writes each scoreable comment separately and persists resume state.
 7. Run `verify` against the generated manifest. Treat the upload as successful only when titles, final task/Bug statuses, and every expected `commented` action match.
@@ -60,6 +61,7 @@ Never put all completion or resolution steps into the description. Never rely on
 
 ```powershell
 python -m zentao_tool.cli collect 2026-07
+python -m zentao_tool.cli inspect-evidence output\2026-07\evidence.json --repository bi_center --query 测试 --query 部署
 python -m zentao_tool.cli draft output\2026-07\evidence.json
 python -m zentao_tool.cli validate output\2026-07\draft.json
 python -m zentao_tool.cli preview output\2026-07\draft.json
@@ -68,6 +70,14 @@ python -m zentao_tool.cli verify records\manifests\2026-07-formal_auto.json
 ```
 
 The default `formal_auto` probes the formal intranet first and uses the formal external endpoint when intranet access is unavailable. Selection happens before a command; never switch endpoints halfway through an upload. Place `--env test`, `--env formal_external`, or another global option before the subcommand. Use `test` only when the user explicitly requests or is authorized for the test system.
+
+## Token Budget Rules
+
+- Compact evidence is the default. If `mode` is `full` or the main evidence exceeds 500 KB, stop and recollect without `--full`.
+- Never load all files under `details/sessions`. Use the compact turns to shortlist evidence, then call `inspect-evidence` once with multiple `--session` or a repository filter.
+- Avoid one shell/model round trip per commit or session. Prefer one structured query per repository family.
+- Treat `bug_candidates` as an index, not content ready for upload. Do not draft template resolution steps for unsupported candidates.
+- Preserve source hashes from the baseline instead of repeatedly rediscovering them.
 
 Read [references/prompt-examples.md](references/prompt-examples.md) when recommending a new-session prompt. Read [references/evidence-sources.md](references/evidence-sources.md) when Codex records are absent or another AI coding tool supplied the evidence.
 

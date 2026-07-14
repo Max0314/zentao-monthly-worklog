@@ -13,10 +13,19 @@ def load_json(path: str | Path) -> dict[str, Any]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
-def save_json(path: str | Path, data: dict[str, Any]) -> Path:
+def save_json(path: str | Path, data: dict[str, Any], pretty: bool = True) -> Path:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    target.write_text(
+        json.dumps(
+            data,
+            ensure_ascii=False,
+            indent=2 if pretty else None,
+            separators=None if pretty else (",", ":"),
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     return target
 
 

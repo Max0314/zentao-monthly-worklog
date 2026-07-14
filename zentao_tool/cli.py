@@ -8,7 +8,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
-from .collect import collect_month
+from .collect import collect_month, inspect_evidence_sessions
 from .config import (
     DEFAULT_CONFIG_PATH,
     find_config,
@@ -102,6 +102,22 @@ def build_parser():
     )
     collect.add_argument("--department", help="Department or team ownership context")
     collect.add_argument("--work-description", help="Manual work summary when chat records are absent")
+    collect.add_argument(
+        "--full",
+        action="store_true",
+        help="Embed complete conversation messages in evidence instead of compact indexes",
+    )
+
+    inspect_evidence = sub.add_parser(
+        "inspect-evidence", help="Read selected compact session details within a token budget"
+    )
+    inspect_evidence.add_argument("evidence")
+    inspect_evidence.add_argument("--session", action="append", default=[])
+    inspect_evidence.add_argument("--repository", action="append", default=[])
+    inspect_evidence.add_argument("--query", action="append", default=[])
+    inspect_evidence.add_argument("--max-sessions", type=int, default=6)
+    inspect_evidence.add_argument("--max-messages", type=int, default=12)
+    inspect_evidence.add_argument("--max-characters", type=int, default=30000)
 
     draft = sub.add_parser("draft", help="Create an editable draft from an evidence file")
     draft.add_argument("evidence")
@@ -253,13 +269,46 @@ def main(argv=None):
             context_files=args.context,
             department=args.department,
             work_description=args.work_description,
+            compact=not args.full,
         )
-        print(target.resolve())
+        evidence = load_json(target)
+        _print(
+            {
+                "evidence": str(target.resolve()),
+                "mode": evidence.get("mode"),
+                "bytes": target.stat().st_size,
+                "stats": evidence.get("stats", {}),
+            }
+        )
+        return 0
+
+    if args.command == "inspect-evidence":
+        _print(
+            inspect_evidence_sessions(
+                args.evidence,
+                session_ids=args.session,
+                repositories=args.repository,
+                queries=args.query,
+                max_sessions=args.max_sessions,
+                max_messages=args.max_messages,
+                max_characters=args.max_characters,
+            )
+        )
         return 0
 
     if args.command == "draft":
         target = create_draft_file(args.evidence, _settings(args, require_password=False), args.output)
-        print(target.resolve())
+        draft_data = load_json(target)
+        _print(
+            {
+                "draft": str(target.resolve()),
+                "stories": len(draft_data.get("stories", [])),
+                "tasks": len(draft_data.get("tasks", [])),
+                "bugs": len(draft_data.get("bugs", [])),
+                "bug_candidates": len(draft_data.get("bug_candidates", [])),
+                "unclassified": len(draft_data.get("unclassified", [])),
+            }
+        )
         return 0
 
     if args.command == "validate":
