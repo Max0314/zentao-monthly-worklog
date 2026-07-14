@@ -68,6 +68,33 @@ class ConfigTests(unittest.TestCase):
             )
             self.assertTrue(all(item.requested_environment_name == "formal_auto" for item in candidates))
 
+    def test_environment_can_override_scope_mappings(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "config.local.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "account": "user",
+                        "password": "pass",
+                        "project_id": 1,
+                        "executions": {"work": {"id": 10, "product_id": 20}},
+                        "repositories": {"repo": {"execution": "work"}},
+                        "environments": {
+                            "test": {
+                                "base_url": "http://test.example",
+                                "project_id": 2,
+                                "executions": {"work": {"id": 11, "product_id": 21}},
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            settings = load_settings(path, "test")
+            self.assertEqual(settings.project_id, 2)
+            self.assertEqual(settings.execution("work")["id"], 11)
+            self.assertEqual(settings.repositories["repo"]["execution"], "work")
+
 
 if __name__ == "__main__":
     unittest.main()

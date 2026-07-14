@@ -32,6 +32,7 @@ class Settings:
     repositories: dict[str, dict[str, Any]]
     git_authors: list[str]
     comment_probe: dict[str, Any] | None
+    timezone_name: str
 
     def execution(self, value: str | int) -> dict[str, Any]:
         if isinstance(value, int) or str(value).isdigit():
@@ -99,6 +100,9 @@ def _build_settings(
     if require_password and not password:
         raise ValueError("ZenTao password is empty in config.local.json")
 
+    executions = {**data.get("executions", {}), **env.get("executions", {})}
+    repositories = {**data.get("repositories", {}), **env.get("repositories", {})}
+
     return Settings(
         config_path=config_path,
         requested_environment_name=requested_environment_name,
@@ -109,15 +113,16 @@ def _build_settings(
         timeout=int(env.get("timeout", 30)),
         account=account,
         password=password,
-        project_id=int(data.get("project_id", 0)),
+        project_id=int(env.get("project_id", data.get("project_id", 0))),
         workspace_root=Path(data.get("workspace_root", Path.cwd())).expanduser().resolve(),
         codex_sessions_root=Path(
             data.get("codex_sessions_root", Path.home() / ".codex" / "sessions")
         ).expanduser().resolve(),
-        executions=data.get("executions", {}),
-        repositories=data.get("repositories", {}),
+        executions=executions,
+        repositories=repositories,
         git_authors=[str(item).lower() for item in data.get("git_authors", [])],
         comment_probe=env.get("comment_probe", data.get("comment_probe")),
+        timezone_name=str(env.get("timezone", data.get("timezone", "Asia/Shanghai"))),
     )
 
 

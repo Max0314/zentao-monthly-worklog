@@ -2,12 +2,14 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from zentao_tool.collect import (
     build_session_index,
     collect_codex_sessions,
     collect_context_file,
     collect_external_contexts,
+    collect_git_history,
     deduplicate_git_history,
     inspect_evidence_sessions,
     month_bounds,
@@ -35,8 +37,51 @@ class CollectTests(unittest.TestCase):
             self.assertEqual([item["role"] for item in sessions[0]["messages"]], ["user", "assistant"])
             self.assertNotIn("abc", sessions[0]["messages"][0]["text"])
 
+    def test_collects_messages_by_timestamp_across_session_directories(self):
+        with tempfile.TemporaryDirectory() as temp:
+            june_path = Path(temp) / "2026" / "06" / "30" / "june-session.jsonl"
+            july_path = Path(temp) / "2026" / "07" / "31" / "july-session.jsonl"
+            june_path.parent.mkdir(parents=True)
+            july_path.parent.mkdir(parents=True)
+            june_rows = [
+                {"timestamp": "2026-06-30T15:00:00Z", "type": "session_meta", "payload": {"id": "s-june", "cwd": "D:/repo"}},
+                {"timestamp": "2026-06-30T15:01:00Z", "type": "event_msg", "payload": {"type": "user_message", "message": "六月内容"}},
+                {"timestamp": "2026-07-01T01:00:00Z", "type": "event_msg", "payload": {"type": "user_message", "message": "七月内容"}},
+                {"timestamp": "2026-07-01T01:01:00Z", "type": "event_msg", "payload": {"type": "task_complete", "last_agent_message": "七月完成"}},
+            ]
+            july_rows = [
+                {"timestamp": "2026-07-31T01:00:00Z", "type": "session_meta", "payload": {"id": "s-july", "cwd": "D:/repo"}},
+                {"timestamp": "2026-07-31T01:01:00Z", "type": "event_msg", "payload": {"type": "user_message", "message": "七月底内容"}},
+                {"timestamp": "2026-08-01T01:01:00Z", "type": "event_msg", "payload": {"type": "task_complete", "last_agent_message": "八月完成"}},
+            ]
+            june_path.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in june_rows), encoding="utf-8")
+            july_path.write_text("\n".join(json.dumps(row, ensure_ascii=False) for row in july_rows), encoding="utf-8")
+
+            sessions = collect_codex_sessions(Path(temp), "2026-07")
+
+            texts = [message["text"] for session in sessions for message in session["messages"]]
+            self.assertIn("七月内容", texts)
+            self.assertIn("七月完成", texts)
+            self.assertIn("七月底内容", texts)
+            self.assertNotIn("六月内容", texts)
+            self.assertNotIn("八月完成", texts)
+
     def test_redact(self):
         self.assertEqual(redact("token=123"), "token=***")
+        self.assertNotIn("Abc123!secret", redact("user\nAbc123!secret"))
+
+    def test_git_history_filters_exact_month_in_configured_timezone(self):
+        output = (
+            "\x1einside\x1f2026-07-31T23:59:59+08:00\x1fUser\x1fu@example.com\x1ffeat: inside\n"
+            "M\tinside.py\n"
+            "\x1eoutside\x1f2026-08-01T00:00:00+08:00\x1fUser\x1fu@example.com\x1ffeat: outside\n"
+            "M\toutside.py\n"
+        )
+        with patch("zentao_tool.collect.discover_git_repositories", return_value=[Path("repo")]), patch(
+            "zentao_tool.collect._run_git", return_value=output
+        ):
+            repositories = collect_git_history(Path("."), "2026-07")
+        self.assertEqual([item["hash"] for item in repositories[0]["commits"]], ["inside"])
 
     def test_collects_generic_jsonl_context(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -100,7 +145,7 @@ class CollectTests(unittest.TestCase):
             self.assertTrue(detail.is_file())
             self.assertEqual(len(json.loads(detail.read_text(encoding="utf-8"))["messages"]), 20)
 
-    def test_unmapped_session_uses_one_combined_summary_turn(self):
+    def test_unmapped_session_keeps_real_first_and_last_turns(self):
         with tempfile.TemporaryDirectory() as temp:
             evidence = Path(temp) / "evidence.json"
             indexes = build_session_index(
@@ -120,9 +165,32 @@ class CollectTests(unittest.TestCase):
                 evidence,
                 {},
             )
-            self.assertEqual(len(indexes[0]["turns"]), 1)
+            self.assertEqual(len(indexes[0]["turns"]), 2)
             self.assertEqual(indexes[0]["turns"][0]["request"], "最初需求")
-            self.assertEqual(indexes[0]["turns"][0]["result"], "最终结果")
+            self.assertEqual(indexes[0]["turns"][0]["result"], "阶段结果")
+            self.assertEqual(indexes[0]["turns"][1]["request"], "补充要求")
+            self.assertEqual(indexes[0]["turns"][1]["result"], "最终结果")
+
+    def test_workspace_root_session_infers_repository_mentions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            evidence = Path(temp) / "evidence.json"
+            indexes = build_session_index(
+                [
+                    {
+                        "session_id": "root",
+                        "cwd": "D:/code_CPL",
+                        "source": "session.jsonl",
+                        "messages": [
+                            {"role": "user", "text": "请检查 SOP 的生成问题"},
+                            {"role": "assistant", "text": "已在 D:/code_CPL/SOP 完成修复"},
+                        ],
+                    }
+                ],
+                evidence,
+                {"SOP": {"execution": "sop"}},
+            )
+            self.assertIn("SOP", indexes[0]["repository_mentions"])
+            self.assertTrue(indexes[0]["mapped_repository"])
 
     def test_deduplicates_worktrees_by_hash_and_family(self):
         commit = {
@@ -148,6 +216,26 @@ class CollectTests(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["name"], "bi_center")
         self.assertEqual(len(result[0]["commits"]), 2)
+
+    def test_same_hash_in_different_repository_families_is_retained(self):
+        commit = {
+            "hash": "same-hash",
+            "authored_at": "2026-07-01T00:00:00Z",
+            "subject": "shared commit",
+            "files": [],
+        }
+        result, stats = deduplicate_git_history(
+            [
+                {"name": "repo-a", "path": "D:/repo-a", "commits": [commit]},
+                {"name": "repo-b", "path": "D:/repo-b", "commits": [commit]},
+            ],
+            {
+                "repo-a": {"execution": "a"},
+                "repo-b": {"execution": "b"},
+            },
+        )
+        self.assertEqual(len(result), 2)
+        self.assertEqual(stats["unique_commits"], 2)
 
     def test_inspects_only_selected_compact_details(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -178,8 +266,33 @@ class CollectTests(unittest.TestCase):
                 evidence_path, repositories=["repo"], queries=["测试"]
             )
             self.assertEqual(result["selected_sessions"], 1)
-            self.assertEqual(result["sessions"][0]["matched_messages"], 1)
+            self.assertEqual(result["sessions"][0]["matched_messages"], 2)
             self.assertEqual(result["sessions"][0]["source"], "session.jsonl")
+
+    def test_query_only_can_search_all_session_details(self):
+        with tempfile.TemporaryDirectory() as temp:
+            evidence_path = Path(temp) / "evidence.json"
+            indexes = build_session_index(
+                [
+                    {
+                        "session_id": "s1",
+                        "cwd": "D:/code_CPL",
+                        "source": "session.jsonl",
+                        "messages": [
+                            {"role": "user", "text": "SOP 上传失败"},
+                            {"role": "assistant", "text": "已经修复并验证"},
+                        ],
+                    }
+                ],
+                evidence_path,
+                {},
+            )
+            evidence_path.write_text(
+                json.dumps({"mode": "compact", "codex_sessions": indexes, "external_contexts": []}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            result = inspect_evidence_sessions(evidence_path, queries=["SOP"])
+            self.assertEqual(result["sessions"][0]["matched_messages"], 2)
 
 
 if __name__ == "__main__":

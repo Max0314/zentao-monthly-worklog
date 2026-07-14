@@ -40,6 +40,34 @@ class ClientPayloadTests(unittest.TestCase):
         self.assertEqual(payload["product"], 223)
         self.assertNotIn("productID", payload)
 
+    def test_list_all_follows_zentao_pages(self):
+        client = ZentaoClient(account="user", password="pass")
+        with patch.object(
+            client,
+            "request",
+            side_effect=[
+                {"total": 3, "executions": [{"id": 1}, {"id": 2}]},
+                {"total": 3, "executions": [{"id": 3}]},
+            ],
+        ) as request:
+            rows = client._list_all("/executions", "executions", limit=10, page_size=2)
+        self.assertEqual([row["id"] for row in rows], [1, 2, 3])
+        self.assertIn("page=2", request.call_args_list[1].args[1])
+
+    def test_list_all_keeps_page_size_when_limit_is_partial_page(self):
+        client = ZentaoClient(account="user", password="pass")
+        with patch.object(
+            client,
+            "request",
+            side_effect=[
+                {"total": 5, "executions": [{"id": 1}, {"id": 2}]},
+                {"total": 5, "executions": [{"id": 3}, {"id": 4}]},
+            ],
+        ) as request:
+            rows = client._list_all("/executions", "executions", limit=3, page_size=2)
+        self.assertEqual([row["id"] for row in rows], [1, 2, 3])
+        self.assertIn("limit=2&page=2", request.call_args_list[1].args[1])
+
 
 if __name__ == "__main__":
     unittest.main()

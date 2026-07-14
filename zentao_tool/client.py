@@ -88,23 +88,52 @@ class ZentaoClient:
     def ping(self):
         return self.request("GET", "/products?limit=1")
 
-    def list_products(self, limit=200):
-        return self.request("GET", f"/products?limit={limit}").get("products", [])
+    def _list_all(self, path, key, limit=1000, page_size=200):
+        rows = []
+        seen = set()
+        page = 1
+        max_items = int(limit) if limit else None
+        while max_items is None or len(rows) < max_items:
+            separator = "&" if "?" in path else "?"
+            data = self.request(
+                "GET", f"{path}{separator}limit={page_size}&page={page}"
+            )
+            batch = data.get(key, [])
+            added = 0
+            for item in batch:
+                identity = str(item.get("id") or json.dumps(item, sort_keys=True))
+                if identity in seen:
+                    continue
+                seen.add(identity)
+                rows.append(item)
+                added += 1
+                if max_items is not None and len(rows) >= max_items:
+                    break
+            if len(batch) < page_size or not added:
+                break
+            total = data.get("total")
+            if total is not None and len(rows) >= int(total):
+                break
+            page += 1
+        return rows
 
-    def list_projects(self, limit=200):
-        return self.request("GET", f"/projects?limit={limit}").get("projects", [])
+    def list_products(self, limit=1000):
+        return self._list_all("/products", "products", limit)
 
-    def list_executions(self, limit=200):
-        return self.request("GET", f"/executions?limit={limit}").get("executions", [])
+    def list_projects(self, limit=1000):
+        return self._list_all("/projects", "projects", limit)
 
-    def list_execution_tasks(self, execution_id, limit=300):
-        return self.request("GET", f"/executions/{execution_id}/tasks?limit={limit}").get("tasks", [])
+    def list_executions(self, limit=1000):
+        return self._list_all("/executions", "executions", limit)
 
-    def list_execution_bugs(self, execution_id, limit=300):
-        return self.request("GET", f"/executions/{execution_id}/bugs?limit={limit}").get("bugs", [])
+    def list_execution_tasks(self, execution_id, limit=5000):
+        return self._list_all(f"/executions/{execution_id}/tasks", "tasks", limit)
 
-    def list_product_stories(self, product_id, limit=300):
-        return self.request("GET", f"/products/{product_id}/stories?limit={limit}").get("stories", [])
+    def list_execution_bugs(self, execution_id, limit=5000):
+        return self._list_all(f"/executions/{execution_id}/bugs", "bugs", limit)
+
+    def list_product_stories(self, product_id, limit=5000):
+        return self._list_all(f"/products/{product_id}/stories", "stories", limit)
 
     def get_task(self, task_id):
         return self.request("GET", f"/tasks/{task_id}")

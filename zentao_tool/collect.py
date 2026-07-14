@@ -5,9 +5,10 @@ import json
 import os
 import re
 import subprocess
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .records import save_json
 
@@ -25,8 +26,15 @@ SKIP_DIRS = {
     "__pycache__",
 }
 SECRET_RE = re.compile(
-    r"(?i)((?:password|passwd|pwd|token|secret|api[_-]?key|密码)\s*[:=：]\s*)[^\s,;]+"
+    r"(?im)((?:password|passwd|pwd|token|secret|api[_-]?key|authorization|密码)"
+    r"\s*[:=：]\s*)([^\r\n,;]+)"
 )
+BEARER_RE = re.compile(r"(?i)(\bbearer\s+)[A-Za-z0-9._~+/=-]+")
+STANDALONE_PASSWORD_RE = re.compile(
+    r"(?m)(?<!\S)(?=[^\s]{10,128}(?:\s|$))(?=[^\s]*[A-Za-z])"
+    r"(?=[^\s]*\d)(?=[^\s]*[!@#$%^&*?])[^\s]+"
+)
+LONG_HEX_SECRET_RE = re.compile(r"(?i)(?<![0-9a-f])[0-9a-f]{48,}(?![0-9a-f])")
 SIGNAL_PATTERNS = {
     "bug": re.compile(r"(?i)bug|异常|报错|错误|失败|不一致|无法|缺失|超时"),
     "fix": re.compile(r"(?i)fix|修复|解决|兼容|兜底|恢复"),
@@ -46,16 +54,63 @@ def month_bounds(month: str) -> tuple[str, str]:
 
 
 def redact(text: str) -> str:
-    return SECRET_RE.sub(r"\1***", text)
+    text = SECRET_RE.sub(r"\1***", text)
+    text = BEARER_RE.sub(r"\1***", text)
+    text = STANDALONE_PASSWORD_RE.sub("***", text)
+    return LONG_HEX_SECRET_RE.sub("***", text)
 
 
-def collect_codex_sessions(root: Path, month: str) -> list[dict[str, Any]]:
-    month_dir = root / month[:4] / month[5:7]
-    if not month_dir.exists():
+def _timezone(timezone_name: str):
+    try:
+        return ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        if timezone_name in {"Asia/Shanghai", "PRC"}:
+            return timezone(timedelta(hours=8), name="Asia/Shanghai")
+        if timezone_name.upper() in {"UTC", "ETC/UTC"}:
+            return timezone.utc
+        raise
+
+
+def _timestamp_in_month(timestamp: str, month: str, timezone_name: str) -> bool:
+    if not timestamp:
+        return False
+    try:
+        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        local = parsed.astimezone(_timezone(timezone_name))
+        return local.strftime("%Y-%m") == month
+    except (ValueError, ZoneInfoNotFoundError):
+        return timestamp.startswith(month)
+
+
+def _session_file_may_overlap(path: Path, root: Path, month: str, timezone_name: str) -> bool:
+    start_date = datetime.strptime(month, "%Y-%m").date().replace(day=1)
+    if start_date.month == 12:
+        end_date = start_date.replace(year=start_date.year + 1, month=1)
+    else:
+        end_date = start_date.replace(month=start_date.month + 1)
+    try:
+        parts = path.relative_to(root).parts
+        session_date = datetime(int(parts[0]), int(parts[1]), int(parts[2])).date()
+        if session_date >= end_date:
+            return False
+    except (ValueError, IndexError):
+        pass
+    modified = datetime.fromtimestamp(path.stat().st_mtime, _timezone(timezone_name)).date()
+    return modified >= start_date
+
+
+def collect_codex_sessions(
+    root: Path, month: str, timezone_name: str = "Asia/Shanghai"
+) -> list[dict[str, Any]]:
+    if not root.exists():
         return []
 
     sessions = []
-    for path in sorted(month_dir.rglob("*.jsonl")):
+    for path in sorted(root.rglob("*.jsonl")):
+        if not _session_file_may_overlap(path, root, month, timezone_name):
+            continue
         meta: dict[str, Any] = {}
         messages: list[dict[str, str]] = []
         timestamps: list[str] = []
@@ -66,8 +121,6 @@ def collect_codex_sessions(root: Path, month: str) -> list[dict[str, Any]]:
                 except json.JSONDecodeError:
                     continue
                 timestamp = str(item.get("timestamp", ""))
-                if timestamp:
-                    timestamps.append(timestamp)
                 item_type = item.get("type")
                 payload = item.get("payload") or {}
                 if item_type == "session_meta":
@@ -76,7 +129,12 @@ def collect_codex_sessions(root: Path, month: str) -> list[dict[str, Any]]:
                         "cwd": payload.get("cwd"),
                         "originator": payload.get("originator"),
                     }
-                elif item_type == "event_msg" and payload.get("type") == "user_message":
+                    continue
+                if not _timestamp_in_month(timestamp, month, timezone_name):
+                    continue
+                if timestamp:
+                    timestamps.append(timestamp)
+                if item_type == "event_msg" and payload.get("type") == "user_message":
                     text = payload.get("message") or ""
                     if text:
                         messages.append({"role": "user", "text": redact(str(text))})
@@ -255,17 +313,12 @@ def _session_turns(messages: list[dict[str, str]]) -> list[dict[str, str]]:
 
 
 def _sample_turns(turns: list[dict[str, str]], limit: int) -> list[dict[str, str]]:
-    if limit == 1 and turns:
-        selected = [
-            {
-                "request": turns[0].get("request", ""),
-                "result": turns[-1].get("result", ""),
-            }
-        ]
-    elif len(turns) <= limit:
+    if len(turns) <= limit:
         selected = turns
+    elif limit <= 1:
+        selected = turns[-1:]
     else:
-        head = min(2, max(1, limit // 3))
+        head = max(1, limit // 2)
         selected = turns[:head] + turns[-(limit - head) :]
     return [
         {
@@ -283,6 +336,24 @@ def _session_signals(messages: list[dict[str, str]]) -> dict[str, int]:
         for name, pattern in SIGNAL_PATTERNS.items()
         if pattern.search(text)
     }
+
+
+def _repository_mentions(
+    messages: list[dict[str, str]],
+    mappings: dict[str, dict[str, Any]] | None,
+) -> list[str]:
+    if not mappings:
+        return []
+    text = "\n".join(str(message.get("text", "")) for message in messages).lower()
+    mentions = []
+    for pattern in sorted(mappings, key=len, reverse=True):
+        name = pattern.rstrip("*")
+        if not name or name.lower() not in text:
+            continue
+        alias, _mapped = repository_alias(name, mappings)
+        if alias not in mentions:
+            mentions.append(alias)
+    return mentions
 
 
 def build_session_index(
@@ -315,16 +386,22 @@ def build_session_index(
 
         cwd = str(session.get("cwd") or "")
         repo_name = re.split(r"[\\/]", cwd)[-1] if cwd else ""
-        alias, mapped = repository_alias(repo_name, repository_mappings)
+        alias, cwd_mapped = repository_alias(repo_name, repository_mappings)
+        repository_mentions = _repository_mentions(messages, repository_mappings)
+        mapped = cwd_mapped or bool(repository_mentions)
+        repository = alias
+        if not cwd_mapped and len(repository_mentions) == 1:
+            repository = repository_mentions[0]
         turns = _session_turns(messages)
-        turn_limit = 4 if mapped else 1
+        turn_limit = 4 if mapped else 2
         result.append(
             {
                 "evidence_id": evidence_id,
                 "session_id": session_id,
                 "kind": kind,
                 "cwd": cwd or None,
-                "repository": alias or None,
+                "repository": repository or None,
+                "repository_mentions": repository_mentions,
                 "mapped_repository": mapped,
                 "started_at": session.get("started_at"),
                 "ended_at": session.get("ended_at"),
@@ -368,7 +445,12 @@ def _run_git(repo: Path, args: list[str]) -> str:
     return result.stdout
 
 
-def collect_git_history(root: Path, month: str, authors: list[str] | None = None) -> list[dict[str, Any]]:
+def collect_git_history(
+    root: Path,
+    month: str,
+    authors: list[str] | None = None,
+    timezone_name: str = "Asia/Shanghai",
+) -> list[dict[str, Any]]:
     since, until = month_bounds(month)
     author_filters = [item.lower() for item in (authors or [])]
     repositories = []
@@ -395,6 +477,8 @@ def collect_git_history(root: Path, month: str, authors: list[str] | None = None
             if len(fields) != 5:
                 continue
             commit_hash, authored_at, author, email, subject = fields
+            if not _timestamp_in_month(authored_at, month, timezone_name):
+                continue
             author_text = f"{author} {email}".lower()
             if author_filters and not any(value in author_text for value in author_filters):
                 continue
@@ -422,14 +506,14 @@ def deduplicate_git_history(
     repositories: list[dict[str, Any]],
     repository_mappings: dict[str, dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    by_hash: dict[str, dict[str, Any]] = {}
+    by_family_hash: dict[tuple[str, str], dict[str, Any]] = {}
     raw_rows = 0
     for repository in repositories:
         alias, mapped = repository_alias(repository["name"], repository_mappings)
         for commit in repository.get("commits", []):
             raw_rows += 1
-            entry = by_hash.setdefault(
-                commit["hash"],
+            entry = by_family_hash.setdefault(
+                (alias.lower(), commit["hash"]),
                 {"commit": commit, "occurrences": []},
             )
             entry["occurrences"].append(
@@ -442,7 +526,7 @@ def deduplicate_git_history(
             )
 
     groups: dict[str, dict[str, Any]] = {}
-    for entry in by_hash.values():
+    for entry in by_family_hash.values():
         occurrences = sorted(
             entry["occurrences"],
             key=lambda item: (not item["mapped"], len(str(item.get("path") or ""))),
@@ -475,8 +559,11 @@ def deduplicate_git_history(
         )
     return sorted(result, key=lambda item: item["name"].lower()), {
         "raw_commit_rows": raw_rows,
-        "unique_commits": len(by_hash),
-        "duplicate_commit_rows_removed": raw_rows - len(by_hash),
+        "unique_commits": len(by_family_hash),
+        "unique_commit_hashes": len(
+            {entry["commit"]["hash"] for entry in by_family_hash.values()}
+        ),
+        "duplicate_commit_rows_removed": raw_rows - len(by_family_hash),
     }
 
 
@@ -500,29 +587,41 @@ def inspect_evidence_sessions(
         matches_id = not session_ids or bool(
             {str(item.get("session_id")), str(item.get("evidence_id"))} & session_ids
         )
-        matches_repo = not repository_filters or str(item.get("repository", "")).lower() in repository_filters
+        item_repositories = {
+            str(item.get("repository", "")).lower(),
+            *(str(value).lower() for value in item.get("repository_mentions", [])),
+        }
+        matches_repo = not repository_filters or bool(item_repositories & repository_filters)
         if matches_id and matches_repo:
             selected.append(item)
-    if not session_ids and not repository_filters:
-        raise ValueError("Select at least one --session or --repository")
+    if not session_ids and not repository_filters and not query_filters:
+        raise ValueError("Select at least one --session, --repository, or --query")
 
     selected.sort(key=lambda item: str(item.get("ended_at") or ""), reverse=True)
     result = []
     remaining_characters = max_characters
     for item in selected:
         if item.get("detail_file"):
-            detail_path = evidence_path.parent / item["detail_file"]
+            detail_root = evidence_path.parent.resolve()
+            detail_path = (detail_root / item["detail_file"]).resolve()
+            if detail_path != detail_root and detail_root not in detail_path.parents:
+                raise ValueError(f"Session detail escapes the evidence directory: {detail_path}")
             detail = json.loads(detail_path.read_text(encoding="utf-8"))
             messages = detail.get("messages", [])
         else:
             detail = item
             messages = item.get("messages", [])
         if query_filters:
-            messages = [
-                message
-                for message in messages
-                if any(query in str(message.get("text", "")).lower() for query in query_filters)
-            ]
+            matched_messages = []
+            for turn in _session_turns(messages):
+                combined = f"{turn.get('request', '')}\n{turn.get('result', '')}".lower()
+                if not any(query in combined for query in query_filters):
+                    continue
+                if turn.get("request"):
+                    matched_messages.append({"role": "user", "text": turn["request"]})
+                if turn.get("result"):
+                    matched_messages.append({"role": "assistant", "text": turn["result"]})
+            messages = matched_messages
             if not messages:
                 continue
         if len(messages) > max_messages:
@@ -567,14 +666,19 @@ def collect_month(
     compact: bool = True,
 ) -> Path:
     target = Path(output) if output else Path("output") / month / "evidence.json"
-    codex_sessions = collect_codex_sessions(settings.codex_sessions_root, month)
+    codex_sessions = collect_codex_sessions(
+        settings.codex_sessions_root, month, settings.timezone_name
+    )
     external_contexts = collect_external_contexts(
         context_files=context_files,
         department=department,
         work_description=work_description,
     )
     raw_git = collect_git_history(
-        settings.workspace_root, month, authors=settings.git_authors
+        settings.workspace_root,
+        month,
+        authors=settings.git_authors,
+        timezone_name=settings.timezone_name,
     )
     git_repositories, git_stats = deduplicate_git_history(
         raw_git, settings.repositories

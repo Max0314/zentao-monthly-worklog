@@ -14,25 +14,24 @@ Use the installed `zentao_tool` Python package as the deterministic collection a
    - Reuse account, password, workspace root, and Git author aliases already supplied in the conversation.
    - Ask only for missing required values. The password may be supplied to the process as `ZENTAO_PASSWORD`; do not repeat it in progress or final messages.
    - Run `python -m zentao_tool.cli init-config --workspace-root <path> --git-author <name-or-email>`. `ZENTAO_ACCOUNT` and `ZENTAO_PASSWORD` are accepted for unattended Agent setup.
-3. Run `python -m zentao_tool.cli ping`, then `python -m zentao_tool.cli list-scopes`. If execution ownership is not explicit, show likely iterations and ask the user to choose.
-4. Configure confirmed mappings with `python -m zentao_tool.cli configure-execution <alias> <execution-id> <name> <product-id> --repository <pattern> [--project-id <id>]`.
+3. Run `python -m zentao_tool.cli ping`, then `python -m zentao_tool.cli list-scopes --limit 1000`. If execution ownership is not explicit, show likely iterations and ask the user to choose.
+4. Configure confirmed mappings with `python -m zentao_tool.cli configure-execution <alias> <execution-id> <name> <product-id> --repository <pattern> [--project-id <id>]`. Use `--env test` before the command when test ZenTao uses different IDs; environment mappings override global mappings.
 5. Never copy another user's execution, product, project, repository, or Git-author mappings into a new user's configuration.
 
 ## Workflow
 
 1. Run `python -m zentao_tool.cli show-config` and confirm the selected user configuration and workspace.
-2. Run `python -m zentao_tool.cli collect YYYY-MM` with a timeout of at least 60 seconds. It creates compact `output/YYYY-MM/evidence.json` plus complete extracted messages under `output/YYYY-MM/details/sessions/`. Add `--context`, `--department`, or `--work-description` when Codex records are absent or incomplete. Do not use `--full` for routine monthly work.
+2. Run `python -m zentao_tool.cli collect YYYY-MM` with a timeout of at least 60 seconds. It creates compact `output/YYYY-MM/evidence.json` plus complete extracted messages under `output/YYYY-MM/details/sessions/`. Collection follows each message timestamp in the configured timezone, including conversations started in an earlier month. Add `--context`, `--department`, or `--work-description` when Codex records are absent or incomplete. Do not use `--full` for routine monthly work.
 3. Read only the compact evidence first:
    - Use `stats` for source counts and deduplication totals; Git commits are already unique by hash and worktrees are already merged into repository families.
    - Use sampled `codex_sessions[].turns`, `signals`, and mapped repositories to recover likely intent, results, tests, deployments, and pending work.
    - Treat `external_contexts` as additional AI exports or user-supplied work evidence.
    - Do not open every detail file or repeatedly parse the evidence with many small shell commands.
    - When a fact needs confirmation, batch the relevant sessions into one `inspect-evidence` call. Keep the default 30,000-character budget or lower; normally inspect no more than 2-6 sessions per business objective.
-4. Run `python -m zentao_tool.cli draft output/YYYY-MM/evidence.json` for a baseline. Entries in `bug_candidates` are not resolved Bugs; promote only candidates supported by symptom, diagnosis/fix, and validation evidence. Rewrite `output/YYYY-MM/draft.json` once after decisions are settled; avoid placeholder records and repeated whole-file patches.
+4. Run `python -m zentao_tool.cli draft output/YYYY-MM/evidence.json` for a baseline. Entries in `bug_candidates` are not resolved Bugs; promote only candidates supported by symptom, diagnosis/fix, and validation evidence. Fix-like commits remain in the baseline task sources so unsupported Bug candidates still have a task fallback. Remove duplicate source coverage when promoting one to a Bug. Rewrite `output/YYYY-MM/draft.json` once after decisions are settled; avoid placeholder records and repeated whole-file patches.
 5. Run `validate` and `preview`. Show the complete proposed story/task/bug list to the user before any upload unless the user explicitly authorized the complete list in the current request.
 6. After confirmation, run `upload` with `formal_auto` or an explicit environment and a dedicated manifest. Do not replace this command with ad hoc REST calls; it writes each scoreable comment separately and persists resume state.
-7. Run `verify` against the generated manifest. Treat the upload as successful only when titles, final task/Bug statuses, and every expected `commented` action match.
-8. Spot-check `aiScore` on at least one story, task, and Bug when comment scoring is required.
+7. Run `verify --wait-ai-score 180 --require-ai-score` against the generated manifest when scoring is required. Treat the upload as successful only when titles, final task/Bug statuses, expected comment hashes, duplicate counts, and scores match.
 
 ## Draft Rules
 
@@ -66,7 +65,7 @@ python -m zentao_tool.cli draft output\2026-07\evidence.json
 python -m zentao_tool.cli validate output\2026-07\draft.json
 python -m zentao_tool.cli preview output\2026-07\draft.json
 python -m zentao_tool.cli upload output\2026-07\draft.json
-python -m zentao_tool.cli verify records\manifests\2026-07-formal_auto.json
+python -m zentao_tool.cli verify records\manifests\2026-07-formal_auto.json --wait-ai-score 180 --require-ai-score
 ```
 
 The default `formal_auto` probes the formal intranet first and uses the formal external endpoint when intranet access is unavailable. Selection happens before a command; never switch endpoints halfway through an upload. Place `--env test`, `--env formal_external`, or another global option before the subcommand. Use `test` only when the user explicitly requests or is authorized for the test system.
@@ -89,12 +88,13 @@ For a partial trial, create a separate draft containing only the approved record
 - Do not trust HTTP 200 or `comments_written` in the manifest by itself. ZenTao can return the comment form again without creating an action.
 - Require `verify` to report `commented_actions == expected_comments` for every record.
 - Preserve the manifest across retries. The uploader resumes from the last confirmed comment and must not recreate records with an existing ID.
-- If the manifest and server disagree, reconcile progress from the server's actual `actions` list before retrying.
+- The manifest is bound to the test/formal target, account, month, and per-record content hash. Never bypass a mismatch.
+- Before resuming, the uploader reconciles expected comment hashes with the server's actual `actions` list.
 - Read [references/upload-compatibility.md](references/upload-compatibility.md) before changing client, comment, authentication, resume, or verification behavior.
 
 ## Failure Handling
 
 - On upload failure, inspect the manifest entry and rerun the same upload command after fixing the cause. Preserve the manifest so completed comments are not repeated.
-- If a title already exists, accept `skipped_existing` and verify the existing ID before deciding whether comments are missing.
+- If a title already exists, stop by default. Use `--adopt-existing` only after confirming that the object belongs to this user and should receive the draft comments and final state.
 - If test and production credentials differ, set `account` and `password` inside the corresponding environment node in the user's config file.
 - If `verify` reports zero comments, stop before retrying. Confirm whether the server returned a comment form instead of creating `commented` actions, then reconcile actual counts.

@@ -7,6 +7,9 @@ $skillsRoot = Join-Path $CodexHome "skills"
 $target = Join-Path $skillsRoot "zentao-monthly-worklog"
 
 New-Item -ItemType Directory -Force -Path $skillsRoot | Out-Null
+if (Test-Path -LiteralPath $target) {
+    Remove-Item -LiteralPath $target -Recurse -Force
+}
 New-Item -ItemType Directory -Force -Path $target | Out-Null
 Copy-Item -Path (Join-Path $source "*") -Destination $target -Recurse -Force
 

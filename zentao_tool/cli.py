@@ -5,6 +5,7 @@ import getpass
 import json
 import os
 import sys
+import time
 from dataclasses import replace
 from pathlib import Path
 
@@ -78,7 +79,7 @@ def build_parser():
     sub.add_parser("show-config", help="Show the active environment without exposing password")
     sub.add_parser("ping", help="Test REST and web login without changing ZenTao data")
     scopes = sub.add_parser("list-scopes", help="List accessible ZenTao products, projects, and executions")
-    scopes.add_argument("--limit", type=int, default=200)
+    scopes.add_argument("--limit", type=int, default=1000)
 
     configure_execution = sub.add_parser(
         "configure-execution", help="Add a local execution and repository mapping"
@@ -133,9 +134,26 @@ def build_parser():
     upload.add_argument("draft")
     upload.add_argument("--manifest")
     upload.add_argument("--yes", action="store_true", help="Skip interactive confirmation")
+    upload.add_argument(
+        "--adopt-existing",
+        action="store_true",
+        help="Continue an existing same-title record after ownership is confirmed",
+    )
 
     verify = sub.add_parser("verify", help="Verify uploaded records from a manifest")
     verify.add_argument("manifest")
+    verify.add_argument(
+        "--wait-ai-score",
+        type=float,
+        default=0,
+        metavar="SECONDS",
+        help="Poll for comment AI scores for up to this many seconds",
+    )
+    verify.add_argument(
+        "--require-ai-score",
+        action="store_true",
+        help="Fail unless every expected comment has an AI score",
+    )
 
     comment = sub.add_parser("comment", help="Add one real ZenTao web comment")
     comment.add_argument("object_type", choices=["story", "task", "bug"])
@@ -188,6 +206,7 @@ def main(argv=None):
                 "password": "***" if settings.password else "",
                 "workspace_root": str(settings.workspace_root),
                 "codex_sessions_root": str(settings.codex_sessions_root),
+                "timezone": settings.timezone_name,
             }
         )
         return 0
@@ -236,18 +255,24 @@ def main(argv=None):
     if args.command == "configure-execution":
         config_path = find_config(args.config)
         data = load_json(config_path)
-        data.setdefault("executions", {})[args.alias] = {
+        mapping_root = data
+        if args.environment and args.environment != "formal_auto":
+            environments = data.setdefault("environments", {})
+            if args.environment not in environments:
+                raise KeyError(f"Environment {args.environment!r} is not configured")
+            mapping_root = environments[args.environment]
+        mapping_root.setdefault("executions", {})[args.alias] = {
             "id": args.execution_id,
             "name": args.name,
             "product_id": args.product_id,
         }
         for repository in args.repository:
-            data.setdefault("repositories", {})[repository] = {
+            mapping_root.setdefault("repositories", {})[repository] = {
                 "execution": args.alias,
                 "display_name": args.display_name or args.name,
             }
         if args.project_id is not None:
-            data["project_id"] = args.project_id
+            mapping_root["project_id"] = args.project_id
         config_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
@@ -255,7 +280,8 @@ def main(argv=None):
             {
                 "ok": True,
                 "config": str(config_path),
-                "execution": data["executions"][args.alias],
+                "mapping_environment": args.environment or "global",
+                "execution": mapping_root["executions"][args.alias],
                 "repositories": args.repository,
             }
         )
@@ -340,12 +366,26 @@ def main(argv=None):
             / "manifests"
             / f"{draft['month']}-{settings.requested_environment_name}.json"
         )
-        result = BatchUploader(settings, manifest).upload(draft)
+        result = BatchUploader(
+            settings, manifest, adopt_existing=args.adopt_existing
+        ).upload(draft)
         _print(result)
         return 0
 
     if args.command == "verify":
-        rows = verify_manifest(_settings(args, network=True), load_json(args.manifest))
+        settings = _settings(args, network=True)
+        manifest = load_json(args.manifest)
+        deadline = time.monotonic() + max(0, args.wait_ai_score)
+        while True:
+            rows = verify_manifest(settings, manifest)
+            scores_complete = all(
+                row.get("scored_comments", 0) >= row.get("expected_comments", 0)
+                for row in rows
+                if row.get("found")
+            )
+            if scores_complete or time.monotonic() >= deadline:
+                break
+            time.sleep(min(5, max(0, deadline - time.monotonic())))
         _print(rows)
         failed = [
             row
@@ -357,7 +397,16 @@ def main(argv=None):
                 row["type"] == "bug"
                 and (row["actual_status"] != "resolved" or row.get("resolution") != "fixed")
             )
-            or row.get("commented_actions", 0) < row.get("expected_comments", 0)
+            or row.get("matched_comments", 0) != row.get("expected_comments", 0)
+            or row.get("duplicate_expected_comments", 0) != 0
+            or (
+                row.get("origin") == "created"
+                and row.get("commented_actions", 0) != row.get("expected_comments", 0)
+            )
+            or (
+                args.require_ai_score
+                and row.get("scored_comments", 0) != row.get("expected_comments", 0)
+            )
         ]
         return 1 if failed else 0
 

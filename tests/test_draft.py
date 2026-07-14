@@ -33,6 +33,9 @@ class DraftTests(unittest.TestCase):
         self.assertEqual(draft["bugs"], [])
         self.assertEqual(len(draft["bug_candidates"]), 1)
         self.assertIn("inspect conversation evidence", draft["bug_candidates"][0]["reason"])
+        self.assertEqual(len(draft["tasks"]), 1)
+        self.assertIn("abc123", draft["tasks"][0]["sources"])
+        self.assertRegex(draft["date"], r"^2026-07-\d{2}$")
 
 
 if __name__ == "__main__":

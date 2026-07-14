@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+from calendar import monthrange
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +10,12 @@ from .records import load_json, save_json
 
 
 FIX_RE = re.compile(r"(?i)\bfix(?:ed|es)?\b|bug|hotfix|修复|异常|错误|问题")
+
+
+def draft_date(month: str) -> str:
+    start = datetime.strptime(month, "%Y-%m").date()
+    end = date(start.year, start.month, monthrange(start.year, start.month)[1])
+    return min(date.today(), end).isoformat()
 
 
 def _repo_mapping(settings, repo_name: str) -> dict[str, Any] | None:
@@ -36,6 +44,7 @@ def build_draft(evidence: dict[str, Any], settings) -> dict[str, Any]:
     month = evidence["month"]
     draft: dict[str, Any] = {
         "month": month,
+        "date": draft_date(month),
         "project_id": settings.project_id,
         "stories": [],
         "tasks": [],
@@ -75,7 +84,7 @@ def build_draft(evidence: dict[str, Any], settings) -> dict[str, Any]:
         repo_key = "-".join(sorted(group["repositories"]))
         commits = list(group["commits"].values())
         fixes = [item for item in commits if FIX_RE.search(item.get("subject", ""))]
-        work = [item for item in commits if item not in fixes]
+        work = commits
 
         if work:
             subjects = [item["subject"] for item in work[:10]]

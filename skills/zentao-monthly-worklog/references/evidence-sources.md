@@ -2,7 +2,7 @@
 
 ## Supported Inputs
 
-- Codex sessions are discovered from `codex_sessions_root` by month.
+- Codex sessions are discovered from `codex_sessions_root` and filtered by each message timestamp in the configured timezone, so a conversation started in an earlier month is still included.
 - Git repositories are discovered recursively below `workspace_root`.
 - Repeatable `--context` accepts UTF-8 JSON, JSONL, Markdown, and text files.
 - `--department` and `--work-description` add explicit manual context.

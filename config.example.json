@@ -4,6 +4,7 @@
   "password": "",
   "workspace_root": ".",
   "codex_sessions_root": "~/.codex/sessions",
+  "timezone": "Asia/Shanghai",
   "git_authors": [],
   "environment_fallbacks": {
     "formal_auto": ["formal_internal", "formal_external"]

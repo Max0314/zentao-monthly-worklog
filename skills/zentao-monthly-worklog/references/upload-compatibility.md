@@ -19,14 +19,21 @@ Use these rules for the current ZenTao Biz 12.3 environments.
 ## Resume and verification
 
 - Persist the created object ID before writing comments, and persist progress after every comment.
-- After an interruption, query the object's `actions` and count `action == commented`. Reconcile the manifest to that count before resuming.
+- Bind each manifest to its target, account, month, and record hashes. Reject cross-environment or changed-record reuse.
+- After an interruption, query the object's `actions` and match normalized comment hashes in order before resuming.
 - Do not use manifest progress as proof of server state.
 - Verify every object after upload:
   - story exists and title matches;
   - task status is `done`;
   - Bug status is `resolved` with resolution `fixed`;
-  - `commented_actions` equals the draft comment count.
-- When AI scoring is expected, wait briefly and spot-check object `aiScore` values.
+  - every expected comment hash is present once, with no duplicate expected comments;
+  - newly created objects contain exactly the expected number of `commented` actions.
+- When AI scoring is expected, use `verify --wait-ai-score 180 --require-ai-score`.
+
+## Existing titles
+
+- A same-title object is a conflict by default; title equality alone does not prove ownership.
+- Use `upload --adopt-existing` only after manual ownership confirmation. Adoption reconciles existing comments, adds missing comments, and applies the requested final task/Bug state.
 
 ## Expected runtime
 
