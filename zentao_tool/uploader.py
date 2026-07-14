@@ -10,6 +10,7 @@ from .web_comments import ZentaoWebComments
 
 
 FINAL_STATES = {"story_created", "done", "resolved", "skipped_existing", "verified"}
+SINGULAR_TYPES = {"stories": "story", "tasks": "task", "bugs": "bug"}
 
 
 def preview_draft(draft: dict[str, Any]) -> list[dict[str, Any]]:
@@ -18,7 +19,7 @@ def preview_draft(draft: dict[str, Any]) -> list[dict[str, Any]]:
         for record in draft.get(object_type, []):
             rows.append(
                 {
-                    "type": object_type[:-1],
+                    "type": SINGULAR_TYPES[object_type],
                     "title": record.get("title"),
                     "execution": record.get("execution"),
                     "product": record.get("product"),
@@ -123,7 +124,7 @@ class BatchUploader:
             comments = record.get("comments", [])
             while entry["comments_written"] < len(comments):
                 index = entry["comments_written"]
-                self.web.add_comment(object_type[:-1], entry["id"], comments[index])
+                self.web.add_comment(SINGULAR_TYPES[object_type], entry["id"], comments[index])
                 entry["comments_written"] += 1
                 self._save()
 
@@ -195,7 +196,7 @@ def verify_manifest(settings, manifest: dict[str, Any]) -> list[dict[str, Any]]:
             title = item.get("title")
         rows.append(
             {
-                "type": object_type[:-1],
+                "type": SINGULAR_TYPES[object_type],
                 "id": entry["id"],
                 "expected_title": entry["title"],
                 "title": title,

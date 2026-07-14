@@ -135,7 +135,7 @@ class ZentaoClient:
         verify="",
     ):
         payload = {
-            "productID": product_id,
+            "product": product_id,
             "title": title,
             "pri": 3,
             "module": 0,

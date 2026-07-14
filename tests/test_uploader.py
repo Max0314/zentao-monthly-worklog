@@ -63,7 +63,7 @@ class UploaderTests(unittest.TestCase):
         draft = {
             "month": "2026-07",
             "project_id": 9,
-            "stories": [{"product": 2, "title": "S", "detail": "D", "comments": []}],
+            "stories": [{"product": 2, "title": "S", "detail": "D", "comments": ["story comment"]}],
             "tasks": [{"execution": 1, "title": "T", "detail": "D", "comments": ["【任务完成步骤】1", "【任务完成步骤】2"]}],
             "bugs": [{"execution": 1, "product": 2, "title": "B", "detail": "D", "comments": ["【bug解决步骤】1", "【bug解决步骤】2", "【bug解决步骤】3", "【bug解决步骤】4", "【伪代码】x"]}],
         }
@@ -77,7 +77,8 @@ class UploaderTests(unittest.TestCase):
                 [item["state"] for item in result["entries"]],
                 ["story_created", "done", "resolved"],
             )
-            self.assertEqual(len(uploader.web.comments), 7)
+            self.assertEqual(len(uploader.web.comments), 8)
+            self.assertEqual(uploader.web.comments[0], ("story", 301, "story comment"))
             self.assertTrue(manifest.exists())
 
     def test_resumes_created_task_without_recreating_it(self):

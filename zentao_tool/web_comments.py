@@ -1,4 +1,6 @@
 import html
+import hashlib
+import http.cookiejar
 import json
 import os
 import re
@@ -30,7 +32,10 @@ class ZentaoWebComments:
         self.timeout = timeout
         self._token = token
         self._token_provider = token_provider
+        self._web_authenticated = False
+        self.cookie_jar = http.cookiejar.CookieJar()
         handlers = []
+        handlers.append(urllib.request.HTTPCookieProcessor(self.cookie_jar))
         if not verify_tls:
             handlers.append(urllib.request.HTTPSHandler(context=ssl._create_unverified_context()))
         self.opener = urllib.request.build_opener(*handlers)
@@ -71,15 +76,86 @@ class ZentaoWebComments:
         headers = {
             "Token": self.token,
             "X-Requested-With": "XMLHttpRequest",
-            "User-Agent": "Mozilla/5.0",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 Chrome/138 Safari/537.36"
+            ),
         }
         headers.update(extra)
         return headers
 
+    def _ensure_web_login(self):
+        if self._web_authenticated:
+            return
+
+        login_url = self.base_web + "/user-login.html"
+        origin_parts = urllib.parse.urlsplit(self.base_web)
+        origin = f"{origin_parts.scheme}://{origin_parts.netloc}"
+        browser_headers = {
+            "X-Requested-With": "XMLHttpRequest",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 Chrome/138 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Referer": login_url,
+            "Origin": origin,
+        }
+        login_page = urllib.request.Request(login_url, headers=browser_headers, method="GET")
+        with self.opener.open(login_page, timeout=self.timeout):
+            pass
+
+        random_url = self.base_web + "/user-refreshRandom.html"
+        random_req = urllib.request.Request(random_url, headers=browser_headers, method="GET")
+        with self.opener.open(random_req, timeout=self.timeout) as response:
+            verify_rand = response.read().decode("utf-8", errors="replace").strip()
+        if not verify_rand:
+            raise RuntimeError("ZenTao web login did not return verifyRand")
+
+        md5_password = hashlib.md5(self.password.encode("utf-8")).hexdigest()
+        encrypted_password = hashlib.md5(
+            (md5_password + verify_rand).encode("utf-8")
+        ).hexdigest()
+        data = urllib.parse.urlencode(
+            {
+                "account": self.account,
+                "password": encrypted_password,
+                "passwordStrength": "2",
+                "referer": self.base_web + "/",
+                "verifyRand": verify_rand,
+                "keepLogin": "1",
+                "captcha": "",
+            }
+        ).encode("utf-8")
+        login_req = urllib.request.Request(
+            login_url,
+            data=data,
+            headers={
+                **browser_headers,
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "Accept": "application/json, text/javascript, */*; q=0.01",
+            },
+            method="POST",
+        )
+        with self.opener.open(login_req, timeout=self.timeout) as response:
+            body = response.read().decode("utf-8", errors="replace")
+        try:
+            result = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("ZenTao web login returned a non-JSON response") from exc
+        if result.get("result") != "success":
+            raise RuntimeError(f"ZenTao web login failed: {result.get('message') or result}")
+        self._web_authenticated = True
+
     def get_comment_form(self, object_type, object_id):
         self._validate_type(object_type)
+        self._ensure_web_login()
         url = f"{self.base_web}/action-comment-{object_type}-{object_id}.html"
-        req = urllib.request.Request(url, headers=self._headers(), method="GET")
+        req = urllib.request.Request(
+            url,
+            headers=self._headers(Referer=f"{self.base_web}/{object_type}-view-{object_id}.html"),
+            method="GET",
+        )
         with self.opener.open(req, timeout=self.timeout) as response:
             body = response.read().decode("utf-8", errors="replace")
         uid_match = re.search(r'name="uid"\s+value="([^"]+)"', body)
@@ -91,6 +167,8 @@ class ZentaoWebComments:
 
     def add_comment(self, object_type, object_id, text):
         url, uid = self.get_comment_form(object_type, object_id)
+        origin_parts = urllib.parse.urlsplit(self.base_web)
+        origin = f"{origin_parts.scheme}://{origin_parts.netloc}"
         data = urllib.parse.urlencode(
             {"actioncomment": to_html(text), "uid": uid}
         ).encode("utf-8")
@@ -101,6 +179,8 @@ class ZentaoWebComments:
                 **{
                     "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
                     "Accept": "application/json, text/javascript, */*; q=0.01",
+                    "Origin": origin,
+                    "Referer": url,
                 }
             ),
             method="POST",
@@ -113,6 +193,8 @@ class ZentaoWebComments:
             result = {}
         if result.get("result") == "fail":
             raise RuntimeError(f"ZenTao comment failed: {result}")
+        if b"zin_action_comment_form" in body:
+            raise RuntimeError("ZenTao comment was not submitted; the server returned the form again")
         return body
 
     @staticmethod

@@ -17,8 +17,9 @@ Use `D:\code_CPL\zentao_tool` as the deterministic collection and upload engine.
    - Deduplicate commits repeated across worktrees by commit hash.
 4. Run `python -m zentao_tool.cli draft output/YYYY-MM/evidence.json` for a baseline, then rewrite `output/YYYY-MM/draft.json` using the rules below.
 5. Run `validate` and `preview`. Show the complete proposed story/task/bug list to the user before any upload unless the user explicitly authorized the complete list in the current request.
-6. After confirmation, run `upload`. Do not replace this command with ad hoc REST calls; it writes each scoreable comment separately and persists resume state.
-7. Run `verify` against the generated manifest and report IDs, statuses, skipped duplicates, and failures.
+6. After confirmation, run `upload` with an explicit environment and a dedicated manifest. Do not replace this command with ad hoc REST calls; it writes each scoreable comment separately and persists resume state.
+7. Run `verify` against the generated manifest. Treat the upload as successful only when titles, final task/Bug statuses, and every expected `commented` action match.
+8. Spot-check `aiScore` on at least one story, task, and Bug when comment scoring is required.
 
 ## Draft Rules
 
@@ -55,8 +56,20 @@ python -m zentao_tool.cli verify records\manifests\2026-07-formal_internal.json
 
 Place `--env test`, `--env formal_external`, or another global option before the subcommand.
 
+For a partial trial, create a separate draft containing only the approved records and use a separate manifest. Never reuse the full-month manifest for a subset upload.
+
+## Upload Integrity
+
+- Always run `show-config`, `ping`, `validate`, and `preview` with the same explicit environment that will receive the upload.
+- Do not trust HTTP 200 or `comments_written` in the manifest by itself. ZenTao can return the comment form again without creating an action.
+- Require `verify` to report `commented_actions == expected_comments` for every record.
+- Preserve the manifest across retries. The uploader resumes from the last confirmed comment and must not recreate records with an existing ID.
+- If the manifest and server disagree, reconcile progress from the server's actual `actions` list before retrying.
+- Read [references/upload-compatibility.md](references/upload-compatibility.md) before changing client, comment, authentication, resume, or verification behavior.
+
 ## Failure Handling
 
 - On upload failure, inspect the manifest entry and rerun the same upload command after fixing the cause. Preserve the manifest so completed comments are not repeated.
 - If a title already exists, accept `skipped_existing` and verify the existing ID before deciding whether comments are missing.
 - If test and production credentials differ, set `account` and `password` inside the corresponding environment node in `config.local.json`.
+- If `verify` reports zero comments, stop before retrying. Confirm whether the server returned a comment form instead of creating `commented` actions, then reconcile actual counts.
