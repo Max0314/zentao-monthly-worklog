@@ -1,0 +1,4 @@
+interface:
+  display_name: "禅道月度工作整理"
+  short_description: "汇总 Codex 对话和 Git 变更并创建禅道需求任务与 Bug"
+  default_prompt: "Use $zentao-monthly-worklog to summarize this month and prepare ZenTao stories, tasks, bugs, and scored comments."
