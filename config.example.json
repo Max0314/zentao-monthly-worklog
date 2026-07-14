@@ -1,30 +1,47 @@
 {
-  "base_web": "http://10.70.33.19/biz",
-  "base_api": "http://10.70.33.19/biz/api.php/v1",
-  "account_env": "ZENTAO_ACCOUNT",
-  "password_env": "ZENTAO_PASSWORD",
-  "project_id": 1292,
-  "executions": {
-    "review": {
-      "id": 1708,
-      "name": "智慧Git代码审查管理系统",
-      "product_id": 654
+  "active_environment": "formal_internal",
+  "account": "chenpenglie",
+  "password": "在 config.local.json 中填写密码",
+  "workspace_root": "D:\\code_CPL",
+  "codex_sessions_root": "C:\\Users\\陈鹏列\\.codex\\sessions",
+  "git_authors": ["chenpenglie", "陈鹏列"],
+  "environments": {
+    "formal_external": {
+      "base_url": "https://itms.changhongnetwork.net:28443",
+      "path_prefix": "/biz",
+      "verify_tls": true,
+      "timeout": 30
     },
-    "zentao_ai": {
-      "id": 2826,
-      "name": "禅道AI建设",
-      "product_id": 223
+    "formal_internal": {
+      "base_url": "http://10.70.33.19",
+      "path_prefix": "/biz",
+      "verify_tls": true,
+      "timeout": 30
     },
-    "assistant": {
-      "id": 3248,
-      "name": "研发AI助理及知识库",
-      "product_id": 223
-    },
-    "sop": {
-      "id": 4058,
-      "name": "SOP文档生成系统",
-      "product_id": 654
+    "test": {
+      "base_url": "http://10.70.33.18",
+      "path_prefix": "/biz",
+      "account": "",
+      "password": "",
+      "verify_tls": true,
+      "timeout": 30,
+      "comment_probe": null
     }
+  },
+  "project_id": 1292,
+  "comment_probe": {"type": "task", "id": 88916},
+  "executions": {
+    "review": {"id": 1708, "name": "智慧Git代码审查管理系统", "product_id": 654},
+    "zentao_ai": {"id": 2826, "name": "禅道AI建设", "product_id": 223},
+    "assistant": {"id": 3248, "name": "研发AI助理及知识库", "product_id": 223},
+    "sop": {"id": 4058, "name": "SOP文档生成系统", "product_id": 654}
+  },
+  "repositories": {
+    "SOP": {"execution": "sop", "display_name": "SOP文档生成系统"},
+    "bi_center*": {"execution": "zentao_ai", "display_name": "BI综合管理与禅道AI建设"},
+    "zentao_manager": {"execution": "zentao_ai", "display_name": "禅道AI建设"},
+    "zentao_mcp": {"execution": "zentao_ai", "display_name": "禅道MCP服务"},
+    "ai_code_review*": {"execution": "review", "display_name": "智慧Git代码审查管理系统"},
+    "ai_patents": {"execution": "assistant", "display_name": "AI专利助手"}
   }
 }
-

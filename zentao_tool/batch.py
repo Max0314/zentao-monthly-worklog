@@ -2,10 +2,22 @@ from .client import ZentaoClient, extract_created_id
 from .web_comments import ZentaoWebComments
 
 
+def _web_from_client(client):
+    return ZentaoWebComments(
+        base_web=client.base_web,
+        base_api=client.base_api,
+        account=client.account,
+        password=client.password,
+        token=client.token,
+        verify_tls=client.verify_tls,
+        timeout=client.timeout,
+    )
+
+
 def create_completed_task_with_comments(client, comments, execution_id, title, detail, estimate=3, date=None):
     created = client.create_task(execution_id, title, detail, estimate=estimate, date=date)
     task_id = extract_created_id(created, "task")
-    web = ZentaoWebComments(account=client.account, password=client.password)
+    web = _web_from_client(client)
     for comment in comments:
         web.add_comment("task", task_id, comment)
     client.finish_task(task_id, consumed=estimate, date=date)
@@ -15,7 +27,7 @@ def create_completed_task_with_comments(client, comments, execution_id, title, d
 def create_resolved_bug_with_comments(client, comments, product_id, execution_id, project_id, title, detail, date=None):
     created = client.create_bug(product_id, execution_id, project_id, title, detail)
     bug_id = extract_created_id(created, "bug")
-    web = ZentaoWebComments(account=client.account, password=client.password)
+    web = _web_from_client(client)
     for comment in comments:
         web.add_comment("bug", bug_id, comment)
     client.resolve_bug(bug_id, date=date)
@@ -61,4 +73,3 @@ def verify_records(client, tasks_by_execution, bugs_by_execution):
             )
 
     return rows
-
