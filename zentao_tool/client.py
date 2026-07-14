@@ -88,6 +88,15 @@ class ZentaoClient:
     def ping(self):
         return self.request("GET", "/products?limit=1")
 
+    def list_products(self, limit=200):
+        return self.request("GET", f"/products?limit={limit}").get("products", [])
+
+    def list_projects(self, limit=200):
+        return self.request("GET", f"/projects?limit={limit}").get("projects", [])
+
+    def list_executions(self, limit=200):
+        return self.request("GET", f"/executions?limit={limit}").get("executions", [])
+
     def list_execution_tasks(self, execution_id, limit=300):
         return self.request("GET", f"/executions/{execution_id}/tasks?limit={limit}").get("tasks", [])
 

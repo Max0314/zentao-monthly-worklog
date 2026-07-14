@@ -5,11 +5,22 @@ description: Collect and analyze Codex or other AI conversations, Git changes, a
 
 # ZenTao Monthly Worklog
 
-Use `D:\code_CPL\zentao_tool` as the deterministic collection and upload engine. Keep business configuration in its ignored `config.local.json`; do not put ZenTao addresses or credentials in this skill.
+Use the installed `zentao_tool` Python package as the deterministic collection and upload engine. Invoke it as `python -m zentao_tool.cli`; the shorter `zentao-tool` entry point is optional because user-level Scripts directories may not be on `PATH`. Never assume a checkout path or require the user's repositories to live beside this skill. Keep per-user configuration in `~/.zentao-monthly-worklog/config.local.json`; never write credentials into the skill or a Git repository.
+
+## Tool And Agent Setup
+
+1. Run `python -m zentao_tool.cli --help`. If unavailable, check `ZENTAO_TOOL_HOME` for a checkout and install it with `python -m pip install -e <path>`. If neither exists, tell the user that the companion repository must be installed; do not search arbitrary business workspaces for it.
+2. Run `python -m zentao_tool.cli show-config`. If configuration is absent, configure it on the user's behalf:
+   - Reuse account, password, workspace root, and Git author aliases already supplied in the conversation.
+   - Ask only for missing required values. The password may be supplied to the process as `ZENTAO_PASSWORD`; do not repeat it in progress or final messages.
+   - Run `python -m zentao_tool.cli init-config --workspace-root <path> --git-author <name-or-email>`. `ZENTAO_ACCOUNT` and `ZENTAO_PASSWORD` are accepted for unattended Agent setup.
+3. Run `python -m zentao_tool.cli ping`, then `python -m zentao_tool.cli list-scopes`. If execution ownership is not explicit, show likely iterations and ask the user to choose.
+4. Configure confirmed mappings with `python -m zentao_tool.cli configure-execution <alias> <execution-id> <name> <product-id> --repository <pattern> [--project-id <id>]`.
+5. Never copy another user's execution, product, project, repository, or Git-author mappings into a new user's configuration.
 
 ## Workflow
 
-1. Locate the `zentao_tool` checkout, enter it, and run `python -m zentao_tool.cli show-config`. The usual CPL path is `D:\code_CPL\zentao_tool`.
+1. Run `python -m zentao_tool.cli show-config` and confirm the selected user configuration and workspace.
 2. Run `python -m zentao_tool.cli collect YYYY-MM` to create `output/YYYY-MM/evidence.json`. Add `--context`, `--department`, or `--work-description` when Codex records are absent or incomplete.
 3. Read the evidence and analyze both sources:
    - Use Codex user requests and final answers to recover intent, implementation steps, validation, and resolved symptoms.
@@ -28,7 +39,7 @@ Use `D:\code_CPL\zentao_tool` as the deterministic collection and upload engine.
 - Create a story for a distinct new business capability or explicit requirement. Do not invent stories for routine refactoring.
 - Create a task for implemented features, integrations, engineering improvements, migrations, or substantial analysis work.
 - Create a bug only when evidence shows an incorrect behavior, reproducible symptom, regression, exception, data error, or compatibility problem that was fixed.
-- Map each record through `config.local.json` repository and execution mappings. Leave uncertain items in `unclassified` and explain the missing mapping.
+- Map each record through the current user's repository and execution mappings. Leave uncertain items in `unclassified` and explain the missing mapping.
 - Do not claim work that is unsupported by either conversations or Git evidence.
 - Department responsibilities alone may support proposed stories/tasks/Bugs, but label them `待确认`; never mark a task done or a Bug fixed without implementation and validation evidence.
 - A Bug requires an observed symptom plus diagnosis/fix evidence. Do not turn every department responsibility or feature idea into a resolved Bug.
@@ -48,7 +59,6 @@ Never put all completion or resolution steps into the description. Never rely on
 ## Commands
 
 ```powershell
-cd D:\code_CPL\zentao_tool
 python -m zentao_tool.cli collect 2026-07
 python -m zentao_tool.cli draft output\2026-07\evidence.json
 python -m zentao_tool.cli validate output\2026-07\draft.json
@@ -76,5 +86,5 @@ For a partial trial, create a separate draft containing only the approved record
 
 - On upload failure, inspect the manifest entry and rerun the same upload command after fixing the cause. Preserve the manifest so completed comments are not repeated.
 - If a title already exists, accept `skipped_existing` and verify the existing ID before deciding whether comments are missing.
-- If test and production credentials differ, set `account` and `password` inside the corresponding environment node in `config.local.json`.
+- If test and production credentials differ, set `account` and `password` inside the corresponding environment node in the user's config file.
 - If `verify` reports zero comments, stop before retrying. Confirm whether the server returned a comment form instead of creating `commented` actions, then reconcile actual counts.

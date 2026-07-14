@@ -5,10 +5,17 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from zentao_tool.config import load_settings, load_settings_candidates
+from zentao_tool.config import CONFIG_TEMPLATE_PATH, load_settings, load_settings_candidates
 
 
 class ConfigTests(unittest.TestCase):
+    def test_packaged_template_matches_repository_example(self):
+        repository_example = Path(__file__).resolve().parents[1] / "config.example.json"
+        self.assertEqual(
+            json.loads(CONFIG_TEMPLATE_PATH.read_text(encoding="utf-8")),
+            json.loads(repository_example.read_text(encoding="utf-8")),
+        )
+
     def test_local_config_has_precedence_over_stale_environment(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "config.local.json"

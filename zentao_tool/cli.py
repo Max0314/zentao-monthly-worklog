@@ -3,13 +3,15 @@ from __future__ import annotations
 import argparse
 import getpass
 import json
+import os
 import sys
 from dataclasses import replace
 from pathlib import Path
 
 from .collect import collect_month
 from .config import (
-    DEFAULT_CONFIG_NAME,
+    DEFAULT_CONFIG_PATH,
+    find_config,
     load_settings,
     load_settings_candidates,
     write_default_config,
@@ -51,12 +53,12 @@ def build_parser():
         prog="zentao-tool",
         description="Collect AI conversations/Git monthly work and record it in ZenTao.",
     )
-    parser.add_argument("--config", help="Path to config.local.json")
+    parser.add_argument("--config", help="Path to the user configuration file")
     parser.add_argument("--env", dest="environment", help="Environment name from config")
     sub = parser.add_subparsers(dest="command", required=True)
 
     init = sub.add_parser("init-config", help="Create a local configuration file")
-    init.add_argument("--path", default=DEFAULT_CONFIG_NAME)
+    init.add_argument("--path", default=str(DEFAULT_CONFIG_PATH))
     init.add_argument("--account", help="ZenTao account; prompted when omitted")
     init.add_argument("--password", help="Password; prompted when omitted")
     init.add_argument(
@@ -66,9 +68,28 @@ def build_parser():
         help="Default ZenTao environment",
     )
     init.add_argument("--workspace-root", help="Root directory containing Git repositories")
+    init.add_argument(
+        "--git-author",
+        action="append",
+        default=[],
+        help="Git author name or email to include; repeat for aliases",
+    )
 
     sub.add_parser("show-config", help="Show the active environment without exposing password")
     sub.add_parser("ping", help="Test REST and web login without changing ZenTao data")
+    scopes = sub.add_parser("list-scopes", help="List accessible ZenTao products, projects, and executions")
+    scopes.add_argument("--limit", type=int, default=200)
+
+    configure_execution = sub.add_parser(
+        "configure-execution", help="Add a local execution and repository mapping"
+    )
+    configure_execution.add_argument("alias")
+    configure_execution.add_argument("execution_id", type=int)
+    configure_execution.add_argument("name")
+    configure_execution.add_argument("product_id", type=int)
+    configure_execution.add_argument("--repository", action="append", default=[])
+    configure_execution.add_argument("--display-name")
+    configure_execution.add_argument("--project-id", type=int)
 
     collect = sub.add_parser("collect", help="Collect AI sessions, work notes, and Git changes")
     collect.add_argument("month", help="Month in YYYY-MM format")
@@ -113,10 +134,12 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
 
     if args.command == "init-config":
-        account = args.account or input("ZenTao account: ").strip()
+        account = args.account or os.environ.get("ZENTAO_ACCOUNT") or input("ZenTao account: ").strip()
         if not account:
             raise ValueError("ZenTao account cannot be empty")
-        password = args.password if args.password is not None else getpass.getpass("ZenTao password: ")
+        password = args.password
+        if password is None:
+            password = os.environ.get("ZENTAO_PASSWORD") or getpass.getpass("ZenTao password: ")
         if not password:
             raise ValueError("ZenTao password cannot be empty")
         target = write_default_config(
@@ -124,6 +147,7 @@ def main(argv=None):
             account=account,
             environment=args.environment,
             workspace_root=args.workspace_root,
+            git_authors=args.git_author,
         )
         data = load_json(target)
         data["password"] = password
@@ -169,6 +193,54 @@ def main(argv=None):
                 "selected_environment": settings.environment_name,
                 "base_web": settings.base_web,
                 "comment_probe": probe,
+            }
+        )
+        return 0
+
+    if args.command == "list-scopes":
+        from .client import ZentaoClient
+
+        client = ZentaoClient.from_settings(_settings(args, network=True))
+
+        def compact(rows, fields):
+            return [{key: row.get(key) for key in fields if key in row} for row in rows]
+
+        _print(
+            {
+                "products": compact(client.list_products(args.limit), ["id", "name", "status"]),
+                "projects": compact(client.list_projects(args.limit), ["id", "name", "status"]),
+                "executions": compact(
+                    client.list_executions(args.limit),
+                    ["id", "name", "project", "products", "status"],
+                ),
+            }
+        )
+        return 0
+
+    if args.command == "configure-execution":
+        config_path = find_config(args.config)
+        data = load_json(config_path)
+        data.setdefault("executions", {})[args.alias] = {
+            "id": args.execution_id,
+            "name": args.name,
+            "product_id": args.product_id,
+        }
+        for repository in args.repository:
+            data.setdefault("repositories", {})[repository] = {
+                "execution": args.alias,
+                "display_name": args.display_name or args.name,
+            }
+        if args.project_id is not None:
+            data["project_id"] = args.project_id
+        config_path.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        _print(
+            {
+                "ok": True,
+                "config": str(config_path),
+                "execution": data["executions"][args.alias],
+                "repositories": args.repository,
             }
         )
         return 0

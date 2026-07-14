@@ -23,28 +23,53 @@ AI 对话 + Git 提交 + 部门/工作描述
 - 能访问至少一个配置的禅道地址
 - 不需要 Docker、浏览器或 `zentao_MCP`
 
-可直接在仓库内运行：
+工具可以克隆到任意目录，不依赖业务代码工作区：
 
 ```powershell
-cd D:\code_CPL\zentao_tool
-.\zentao.cmd show-config
+git clone git@github.com:Max0314/zentao-monthly-worklog.git
+cd zentao-monthly-worklog
+python -m pip install -e .
+powershell -ExecutionPolicy Bypass -File .\scripts\install_skill.ps1
 ```
 
-也可以执行 `python -m pip install -e .`，然后全局使用 `zentao-tool`。
+安装后可以在任意目录运行 `python -m zentao_tool.cli`。如果 Python 的 Scripts 目录已加入 `PATH`，也可以使用短命令 `zentao-tool`。Skill 默认使用前者，因此不依赖固定业务工作区或 Scripts 的 PATH 配置。
 
 ## 首次配置
 
 推荐交互式初始化：
 
 ```powershell
-zentao-tool init-config --workspace-root D:\code_CPL
+python -m zentao_tool.cli init-config --workspace-root D:\your-workspace --git-author "Your Name"
 ```
 
-程序会依次询问禅道用户名和密码；密码输入时终端不回显。配置写入被 Git 忽略的 `config.local.json`。也支持非交互参数，但密码会出现在终端历史中：
+程序会依次询问禅道用户名和密码；密码输入时终端不回显。配置默认写入当前用户目录的 `~/.zentao-monthly-worklog/config.local.json`，与工具安装目录、业务代码目录相互独立。
+
+也可以直接让 Agent 配置。用户可以在对话中提供账号、密码、代码根目录和 Git 作者，例如：
+
+```text
+使用 $zentao-monthly-worklog 完成首次配置。
+禅道账号：your-account
+禅道密码：your-password
+代码工作区：D:\your-workspace
+Git 作者：Your Name、your.email@example.com
+先连接禅道并列出我可访问的迭代，不要创建数据。
+```
+
+Agent 会通过临时环境变量调用 `init-config`，密码不会写入 Skill 或仓库，但会以明文保存在用户自己的配置文件中。也支持非交互参数，但密码会出现在终端历史中：
 
 ```powershell
-zentao-tool init-config --account your-account --password your-password --workspace-root D:\code_CPL
+python -m zentao_tool.cli init-config --account your-account --password your-password --workspace-root D:\your-workspace
 ```
+
+查看可访问的产品、项目和迭代，然后建立本地分类映射：
+
+```powershell
+python -m zentao_tool.cli list-scopes
+python -m zentao_tool.cli configure-execution review 1708 "代码评审迭代" 654 `
+  --repository "ai_code_review*" --project-id 1292
+```
+
+当归属不明确时，Agent 必须把候选迭代给用户确认；不得沿用其他人的个人迭代映射。
 
 默认环境是 `formal_auto`：
 
@@ -55,26 +80,26 @@ zentao-tool init-config --account your-account --password your-password --worksp
 陈鹏列或获授权的测试人员可显式选择测试禅道：
 
 ```powershell
-zentao-tool --env test ping
-zentao-tool --env test upload output\2026-07\draft.json
+python -m zentao_tool.cli --env test ping
+python -m zentao_tool.cli --env test upload output\2026-07\draft.json
 ```
 
 其他可选值为 `formal_auto`、`formal_internal`、`formal_external`。全局 `--env` 必须放在子命令前。检查配置和连接不会修改禅道数据：
 
 ```powershell
-zentao-tool show-config
-zentao-tool ping
+python -m zentao_tool.cli show-config
+python -m zentao_tool.cli ping
 ```
 
 ## 每月使用
 
 ```powershell
-zentao-tool collect 2026-07
-zentao-tool draft output\2026-07\evidence.json
-zentao-tool validate output\2026-07\draft.json
-zentao-tool preview output\2026-07\draft.json
-zentao-tool upload output\2026-07\draft.json
-zentao-tool verify records\manifests\2026-07-formal_auto.json
+python -m zentao_tool.cli collect 2026-07
+python -m zentao_tool.cli draft output\2026-07\evidence.json
+python -m zentao_tool.cli validate output\2026-07\draft.json
+python -m zentao_tool.cli preview output\2026-07\draft.json
+python -m zentao_tool.cli upload output\2026-07\draft.json
+python -m zentao_tool.cli verify records\manifests\2026-07-formal_auto.json
 ```
 
 `upload` 会显示完整清单，只有输入大写 `YES` 才写入。已确认的自动化场景可加 `--yes`。同一 manifest 重跑时会跳过已完成记录；禅道已有同迭代同标题记录时也会防止重复创建。
@@ -86,7 +111,7 @@ zentao-tool verify records\manifests\2026-07-formal_auto.json
 可以仅依据 Git 和人工输入整理候选清单：
 
 ```powershell
-zentao-tool collect 2026-07 `
+python -m zentao_tool.cli collect 2026-07 `
   --department "研发效能部，负责代码评审、SOP 和禅道 AI 建设" `
   --work-description "本月完善报表导出、评分队列和旧版 Excel 兼容"
 ```
@@ -94,7 +119,7 @@ zentao-tool collect 2026-07 `
 也可以传入一个或多个外部证据文件：
 
 ```powershell
-zentao-tool collect 2026-07 --context D:\exports\neocoder.jsonl --context D:\notes\july.md
+python -m zentao_tool.cli collect 2026-07 --context C:\exports\neocoder.jsonl --context C:\notes\july.md
 ```
 
 支持 UTF-8 的 `.json`、`.jsonl`、`.md`、`.txt`。JSON/JSONL 中常见的 `role`、`author`、`text`、`message`、`content`、`messages` 和 `sessions` 结构会被归一化，因此可用于 NeoCoder 或其他 AI 编码工具的导出记录。工具不会直接扫描尚未公开或不稳定的 NeoCoder 私有存储格式；无法导出时可先整理成 Markdown 或通用 JSONL。
@@ -141,7 +166,7 @@ zentao-tool collect 2026-07 --context D:\exports\neocoder.jsonl --context D:\not
 
 ## 配置项
 
-`config.local.json` 中常用字段：
+`~/.zentao-monthly-worklog/config.local.json` 中常用字段：
 
 - `active_environment`：默认 `formal_auto`。
 - `account`、`password`：通用禅道账号密码；也可在单个环境节点中覆盖。

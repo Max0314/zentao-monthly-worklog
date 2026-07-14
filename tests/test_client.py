@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from zentao_tool.client import ZentaoClient
 
@@ -14,6 +15,21 @@ class RecordingClient(ZentaoClient):
 
 
 class ClientPayloadTests(unittest.TestCase):
+    def test_lists_available_scopes(self):
+        client = ZentaoClient(account="user", password="pass")
+        with patch.object(
+            client,
+            "request",
+            side_effect=[
+                {"products": [{"id": 1}]},
+                {"projects": [{"id": 2}]},
+                {"executions": [{"id": 3}]},
+            ],
+        ):
+            self.assertEqual(client.list_products(), [{"id": 1}])
+            self.assertEqual(client.list_projects(), [{"id": 2}])
+            self.assertEqual(client.list_executions(), [{"id": 3}])
+
     def test_create_story_uses_zentao_product_field(self):
         client = RecordingClient()
 

@@ -9,6 +9,9 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_CONFIG_NAME = "config.local.json"
+DEFAULT_CONFIG_DIR = Path.home() / ".zentao-monthly-worklog"
+DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_DIR / DEFAULT_CONFIG_NAME
+CONFIG_TEMPLATE_PATH = Path(__file__).with_name("config.example.json")
 
 
 @dataclass(frozen=True)
@@ -48,13 +51,16 @@ def find_config(path: str | os.PathLike[str] | None = None) -> Path:
         candidates.append(Path(path))
     if os.environ.get("ZENTAO_TOOL_CONFIG"):
         candidates.append(Path(os.environ["ZENTAO_TOOL_CONFIG"]))
-    candidates.extend([Path.cwd() / DEFAULT_CONFIG_NAME, PROJECT_ROOT / DEFAULT_CONFIG_NAME])
+    candidates.extend(
+        [DEFAULT_CONFIG_PATH, Path.cwd() / DEFAULT_CONFIG_NAME, PROJECT_ROOT / DEFAULT_CONFIG_NAME]
+    )
     for candidate in candidates:
         resolved = candidate.expanduser().resolve()
         if resolved.is_file():
             return resolved
     raise FileNotFoundError(
-        "No config.local.json found. Run `zentao-tool init-config` or copy config.example.json."
+        "No configuration found. Run `python -m zentao_tool.cli init-config` "
+        f"to create {DEFAULT_CONFIG_PATH}."
     )
 
 
@@ -104,7 +110,7 @@ def _build_settings(
         account=account,
         password=password,
         project_id=int(data.get("project_id", 0)),
-        workspace_root=Path(data.get("workspace_root", PROJECT_ROOT.parent)).expanduser().resolve(),
+        workspace_root=Path(data.get("workspace_root", Path.cwd())).expanduser().resolve(),
         codex_sessions_root=Path(
             data.get("codex_sessions_root", Path.home() / ".codex" / "sessions")
         ).expanduser().resolve(),
@@ -162,17 +168,19 @@ def write_default_config(
     account: str,
     environment: str = "formal_auto",
     workspace_root: str | os.PathLike[str] | None = None,
+    git_authors: list[str] | None = None,
 ) -> Path:
     target = Path(path).expanduser().resolve()
     if target.exists():
         raise FileExistsError(f"Config already exists: {target}")
-    template = json.loads((PROJECT_ROOT / "config.example.json").read_text(encoding="utf-8"))
+    template = json.loads(CONFIG_TEMPLATE_PATH.read_text(encoding="utf-8"))
     template["account"] = account
     template["active_environment"] = environment
     template["workspace_root"] = str(
-        Path(workspace_root).expanduser().resolve() if workspace_root else PROJECT_ROOT.parent
+        Path(workspace_root).expanduser().resolve() if workspace_root else Path.cwd().resolve()
     )
     template["codex_sessions_root"] = str(Path.home() / ".codex" / "sessions")
-    template["git_authors"] = []
+    template["git_authors"] = git_authors or []
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(template, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return target

@@ -2,6 +2,19 @@
 
 Recommend the confirmation-first prompt unless the user already approved a complete list.
 
+## First-Time Agent Setup
+
+```text
+使用 $zentao-monthly-worklog 完成首次配置。
+禅道账号：your-account
+禅道密码：your-password
+代码工作区：D:\your-workspace
+Git 作者：Your Name、your.email@example.com
+先验证登录并列出我可访问的迭代，不要创建禅道数据。
+```
+
+The Agent should initialize the per-user config, run `ping` and `list-scopes`, and ask the user to confirm unclear execution mappings.
+
 ## Analyze Only
 
 ```text

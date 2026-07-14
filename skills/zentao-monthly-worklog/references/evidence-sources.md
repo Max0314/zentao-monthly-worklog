@@ -12,7 +12,7 @@ Example:
 
 ```powershell
 python -m zentao_tool.cli collect 2026-07 `
-  --context D:\exports\neocoder.jsonl `
+  --context C:\exports\neocoder.jsonl `
   --department "研发效能部" `
   --work-description "完善代码评审和报表能力"
 ```
