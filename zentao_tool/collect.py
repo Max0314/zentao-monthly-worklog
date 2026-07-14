@@ -91,6 +91,120 @@ def collect_codex_sessions(root: Path, month: str) -> list[dict[str, Any]]:
     return sessions
 
 
+def _content_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        parts = []
+        for item in value:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                text = item.get("text") or item.get("content") or item.get("message")
+                if isinstance(text, str):
+                    parts.append(text)
+        return "\n".join(parts)
+    return ""
+
+
+def _normalize_external_messages(value: Any) -> list[dict[str, str]]:
+    if isinstance(value, dict):
+        if isinstance(value.get("messages"), list):
+            value = value["messages"]
+        else:
+            value = [value]
+    if not isinstance(value, list):
+        return []
+
+    messages = []
+    for item in value:
+        if isinstance(item, str):
+            messages.append({"role": "user", "text": redact(item)})
+            continue
+        if not isinstance(item, dict):
+            continue
+        role = str(item.get("role") or item.get("author") or "user")
+        text = _content_text(item.get("text") or item.get("message") or item.get("content"))
+        if text:
+            messages.append({"role": role, "text": redact(text)})
+    return messages
+
+
+def collect_context_file(path: str | Path) -> list[dict[str, Any]]:
+    source = Path(path).expanduser().resolve()
+    if not source.is_file():
+        raise FileNotFoundError(f"Context file does not exist: {source}")
+
+    suffix = source.suffix.lower()
+    raw = source.read_text(encoding="utf-8", errors="replace")
+    contexts: list[dict[str, Any]] = []
+    if suffix == ".jsonl":
+        rows = []
+        for line in raw.splitlines():
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+        messages = _normalize_external_messages(rows)
+        if messages:
+            contexts.append({"source": str(source), "format": "jsonl", "messages": messages})
+        return contexts
+
+    if suffix == ".json":
+        value = json.loads(raw)
+        sessions = value.get("sessions") if isinstance(value, dict) else None
+        if isinstance(sessions, list):
+            for index, session in enumerate(sessions, start=1):
+                messages = _normalize_external_messages(session)
+                if messages:
+                    contexts.append(
+                        {
+                            "source": f"{source}#session-{index}",
+                            "format": "json",
+                            "messages": messages,
+                        }
+                    )
+        else:
+            messages = _normalize_external_messages(value)
+            if messages:
+                contexts.append({"source": str(source), "format": "json", "messages": messages})
+        return contexts
+
+    text = redact(raw.strip())
+    if text:
+        contexts.append(
+            {
+                "source": str(source),
+                "format": suffix.lstrip(".") or "text",
+                "messages": [{"role": "user", "text": text}],
+            }
+        )
+    return contexts
+
+
+def collect_external_contexts(
+    context_files: list[str] | None = None,
+    department: str | None = None,
+    work_description: str | None = None,
+) -> list[dict[str, Any]]:
+    contexts = []
+    for path in context_files or []:
+        contexts.extend(collect_context_file(path))
+
+    manual_messages = []
+    if department:
+        manual_messages.append(
+            {"role": "user", "text": redact(f"【部门/团队职责】{department.strip()}")}
+        )
+    if work_description:
+        manual_messages.append(
+            {"role": "user", "text": redact(f"【本月工作描述】{work_description.strip()}")}
+        )
+    if manual_messages:
+        contexts.append({"source": "manual-input", "format": "manual", "messages": manual_messages})
+    return contexts
+
+
 def discover_git_repositories(root: Path) -> list[Path]:
     repositories: list[Path] = []
     for current, dirs, _files in os.walk(root):
@@ -169,12 +283,24 @@ def collect_git_history(root: Path, month: str, authors: list[str] | None = None
     return repositories
 
 
-def collect_month(settings, month: str, output: str | Path | None = None) -> Path:
+def collect_month(
+    settings,
+    month: str,
+    output: str | Path | None = None,
+    context_files: list[str] | None = None,
+    department: str | None = None,
+    work_description: str | None = None,
+) -> Path:
     result = {
         "month": month,
         "collected_at": datetime.now(timezone.utc).isoformat(),
         "workspace_root": str(settings.workspace_root),
         "codex_sessions": collect_codex_sessions(settings.codex_sessions_root, month),
+        "external_contexts": collect_external_contexts(
+            context_files=context_files,
+            department=department,
+            work_description=work_description,
+        ),
         "git_repositories": collect_git_history(
             settings.workspace_root, month, authors=settings.git_authors
         ),

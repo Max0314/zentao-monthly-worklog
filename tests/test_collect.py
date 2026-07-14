@@ -3,7 +3,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from zentao_tool.collect import collect_codex_sessions, month_bounds, redact
+from zentao_tool.collect import (
+    collect_codex_sessions,
+    collect_context_file,
+    collect_external_contexts,
+    month_bounds,
+    redact,
+)
 
 
 class CollectTests(unittest.TestCase):
@@ -28,6 +34,31 @@ class CollectTests(unittest.TestCase):
 
     def test_redact(self):
         self.assertEqual(redact("token=123"), "token=***")
+
+    def test_collects_generic_jsonl_context(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "neocoder.jsonl"
+            rows = [
+                {"role": "user", "content": "修复导出异常 token=123"},
+                {"role": "assistant", "content": [{"type": "text", "text": "已回归验证"}]},
+            ]
+            path.write_text(
+                "\n".join(json.dumps(row, ensure_ascii=False) for row in rows),
+                encoding="utf-8",
+            )
+            contexts = collect_context_file(path)
+            self.assertEqual(len(contexts), 1)
+            self.assertEqual([row["role"] for row in contexts[0]["messages"]], ["user", "assistant"])
+            self.assertNotIn("123", contexts[0]["messages"][0]["text"])
+
+    def test_collects_manual_department_and_work_description(self):
+        contexts = collect_external_contexts(
+            department="研发效能，负责代码评审平台",
+            work_description="本月完善仓库同步并修复超时问题",
+        )
+        self.assertEqual(contexts[0]["source"], "manual-input")
+        self.assertEqual(len(contexts[0]["messages"]), 2)
+        self.assertIn("部门/团队职责", contexts[0]["messages"][0]["text"])
 
 
 if __name__ == "__main__":

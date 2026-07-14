@@ -14,6 +14,7 @@ DEFAULT_CONFIG_NAME = "config.local.json"
 @dataclass(frozen=True)
 class Settings:
     config_path: Path
+    requested_environment_name: str
     environment_name: str
     base_web: str
     base_api: str
@@ -57,14 +58,18 @@ def find_config(path: str | os.PathLike[str] | None = None) -> Path:
     )
 
 
-def load_settings(
-    path: str | os.PathLike[str] | None = None,
-    environment: str | None = None,
-    require_password: bool = True,
-) -> Settings:
+def _load_config_data(path: str | os.PathLike[str] | None = None) -> tuple[Path, dict[str, Any]]:
     config_path = find_config(path)
-    data = json.loads(config_path.read_text(encoding="utf-8"))
-    environment_name = environment or data.get("active_environment", "formal_internal")
+    return config_path, json.loads(config_path.read_text(encoding="utf-8"))
+
+
+def _build_settings(
+    config_path: Path,
+    data: dict[str, Any],
+    requested_environment_name: str,
+    environment_name: str,
+    require_password: bool,
+) -> Settings:
     environments = data.get("environments", {})
     if environment_name not in environments:
         raise KeyError(f"Environment {environment_name!r} is not configured")
@@ -90,6 +95,7 @@ def load_settings(
 
     return Settings(
         config_path=config_path,
+        requested_environment_name=requested_environment_name,
         environment_name=environment_name,
         base_web=base_web,
         base_api=base_api,
@@ -109,11 +115,64 @@ def load_settings(
     )
 
 
-def write_default_config(path: str | os.PathLike[str], account: str = "chenpenglie") -> Path:
+def load_settings_candidates(
+    path: str | os.PathLike[str] | None = None,
+    environment: str | None = None,
+    require_password: bool = True,
+) -> list[Settings]:
+    config_path, data = _load_config_data(path)
+    requested_environment_name = environment or data.get("active_environment", "formal_auto")
+    environments = data.get("environments", {})
+    fallbacks = data.get("environment_fallbacks", {})
+    default_candidates = (
+        ["formal_internal", "formal_external"]
+        if requested_environment_name == "formal_auto"
+        else [requested_environment_name]
+    )
+    candidate_names = fallbacks.get(requested_environment_name, default_candidates)
+    if not isinstance(candidate_names, list) or not candidate_names:
+        raise ValueError(
+            f"Environment fallback {requested_environment_name!r} must contain environment names"
+        )
+    unknown = [name for name in candidate_names if name not in environments]
+    if unknown:
+        raise KeyError(f"Environment candidates are not configured: {', '.join(unknown)}")
+    return [
+        _build_settings(
+            config_path,
+            data,
+            requested_environment_name,
+            str(candidate_name),
+            require_password,
+        )
+        for candidate_name in candidate_names
+    ]
+
+
+def load_settings(
+    path: str | os.PathLike[str] | None = None,
+    environment: str | None = None,
+    require_password: bool = True,
+) -> Settings:
+    return load_settings_candidates(path, environment, require_password)[0]
+
+
+def write_default_config(
+    path: str | os.PathLike[str],
+    account: str,
+    environment: str = "formal_auto",
+    workspace_root: str | os.PathLike[str] | None = None,
+) -> Path:
     target = Path(path).expanduser().resolve()
     if target.exists():
         raise FileExistsError(f"Config already exists: {target}")
     template = json.loads((PROJECT_ROOT / "config.example.json").read_text(encoding="utf-8"))
     template["account"] = account
+    template["active_environment"] = environment
+    template["workspace_root"] = str(
+        Path(workspace_root).expanduser().resolve() if workspace_root else PROJECT_ROOT.parent
+    )
+    template["codex_sessions_root"] = str(Path.home() / ".codex" / "sessions")
+    template["git_authors"] = []
     target.write_text(json.dumps(template, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return target

@@ -1,10 +1,13 @@
 {
-  "active_environment": "formal_internal",
-  "account": "chenpenglie",
-  "password": "在 config.local.json 中填写密码",
-  "workspace_root": "D:\\code_CPL",
-  "codex_sessions_root": "C:\\Users\\陈鹏列\\.codex\\sessions",
-  "git_authors": ["chenpenglie", "陈鹏列"],
+  "active_environment": "formal_auto",
+  "account": "",
+  "password": "",
+  "workspace_root": "..",
+  "codex_sessions_root": "~/.codex/sessions",
+  "git_authors": [],
+  "environment_fallbacks": {
+    "formal_auto": ["formal_internal", "formal_external"]
+  },
   "environments": {
     "formal_external": {
       "base_url": "https://itms.changhongnetwork.net:28443",

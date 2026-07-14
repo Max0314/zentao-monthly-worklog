@@ -21,8 +21,8 @@ class ZentaoClient:
     ):
         self.base_api = base_api.rstrip("/")
         self.base_web = base_web.rstrip("/")
-        self.account = account or os.environ.get("ZENTAO_ACCOUNT", "chenpenglie")
-        self.password = password or os.environ["ZENTAO_PASSWORD"]
+        self.account = account or os.environ.get("ZENTAO_ACCOUNT", "")
+        self.password = password or os.environ.get("ZENTAO_PASSWORD", "")
         self.verify_tls = verify_tls
         self.timeout = timeout
         self._token = None

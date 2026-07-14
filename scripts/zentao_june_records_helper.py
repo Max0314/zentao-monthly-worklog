@@ -4,8 +4,8 @@ import urllib.request
 
 
 BASE_API = "http://10.70.33.19/biz/api.php/v1"
-ACCOUNT = os.environ.get("ZENTAO_ACCOUNT", "chenpenglie")
-PASSWORD = os.environ["ZENTAO_PASSWORD"]
+ACCOUNT = os.environ.get("ZENTAO_ACCOUNT", "")
+PASSWORD = os.environ.get("ZENTAO_PASSWORD", "")
 
 # 2026-06-29 批量创建记录。
 # 注意：本脚本不保存密码，运行前设置环境变量 ZENTAO_PASSWORD。

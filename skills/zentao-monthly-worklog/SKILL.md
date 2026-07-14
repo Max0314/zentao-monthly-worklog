@@ -1,6 +1,6 @@
 ---
 name: zentao-monthly-worklog
-description: Collect and analyze local Codex conversations and Git changes, draft monthly ZenTao stories, tasks, bugs, and individually scored comments, then upload and verify them with zentao_tool. Use when the user asks to summarize monthly work, find completed tasks or fixed bugs, classify work into ZenTao executions, create ZenTao records, add AI-scored comments, or verify a previous monthly upload.
+description: Collect and analyze Codex or other AI conversations, Git changes, and manual work context; draft monthly ZenTao stories, tasks, bugs, and individually scored comments; then upload and verify them with zentao_tool. Use when the user asks to summarize monthly work, generate work candidates from department context, classify work into ZenTao executions, create ZenTao records, add AI-scored comments, or verify a previous monthly upload.
 ---
 
 # ZenTao Monthly Worklog
@@ -9,15 +9,16 @@ Use `D:\code_CPL\zentao_tool` as the deterministic collection and upload engine.
 
 ## Workflow
 
-1. Enter `D:\code_CPL\zentao_tool` and run `python -m zentao_tool.cli show-config`.
-2. Run `python -m zentao_tool.cli collect YYYY-MM` to create `output/YYYY-MM/evidence.json`.
+1. Locate the `zentao_tool` checkout, enter it, and run `python -m zentao_tool.cli show-config`. The usual CPL path is `D:\code_CPL\zentao_tool`.
+2. Run `python -m zentao_tool.cli collect YYYY-MM` to create `output/YYYY-MM/evidence.json`. Add `--context`, `--department`, or `--work-description` when Codex records are absent or incomplete.
 3. Read the evidence and analyze both sources:
    - Use Codex user requests and final answers to recover intent, implementation steps, validation, and resolved symptoms.
+   - Treat `external_contexts` as additional AI exports or user-supplied work evidence.
    - Use Git commits and changed files to confirm scope, repositories, implementation evidence, and project ownership.
    - Deduplicate commits repeated across worktrees by commit hash.
 4. Run `python -m zentao_tool.cli draft output/YYYY-MM/evidence.json` for a baseline, then rewrite `output/YYYY-MM/draft.json` using the rules below.
 5. Run `validate` and `preview`. Show the complete proposed story/task/bug list to the user before any upload unless the user explicitly authorized the complete list in the current request.
-6. After confirmation, run `upload` with an explicit environment and a dedicated manifest. Do not replace this command with ad hoc REST calls; it writes each scoreable comment separately and persists resume state.
+6. After confirmation, run `upload` with `formal_auto` or an explicit environment and a dedicated manifest. Do not replace this command with ad hoc REST calls; it writes each scoreable comment separately and persists resume state.
 7. Run `verify` against the generated manifest. Treat the upload as successful only when titles, final task/Bug statuses, and every expected `commented` action match.
 8. Spot-check `aiScore` on at least one story, task, and Bug when comment scoring is required.
 
@@ -29,6 +30,8 @@ Use `D:\code_CPL\zentao_tool` as the deterministic collection and upload engine.
 - Create a bug only when evidence shows an incorrect behavior, reproducible symptom, regression, exception, data error, or compatibility problem that was fixed.
 - Map each record through `config.local.json` repository and execution mappings. Leave uncertain items in `unclassified` and explain the missing mapping.
 - Do not claim work that is unsupported by either conversations or Git evidence.
+- Department responsibilities alone may support proposed stories/tasks/Bugs, but label them `待确认`; never mark a task done or a Bug fixed without implementation and validation evidence.
+- A Bug requires an observed symptom plus diagnosis/fix evidence. Do not turn every department responsibility or feature idea into a resolved Bug.
 - Avoid duplicate titles in the same execution or product. Merge repeated worktree evidence.
 - Preserve useful detail while excluding passwords, tokens, cookies, private keys, and unrelated personal data.
 
@@ -51,10 +54,12 @@ python -m zentao_tool.cli draft output\2026-07\evidence.json
 python -m zentao_tool.cli validate output\2026-07\draft.json
 python -m zentao_tool.cli preview output\2026-07\draft.json
 python -m zentao_tool.cli upload output\2026-07\draft.json
-python -m zentao_tool.cli verify records\manifests\2026-07-formal_internal.json
+python -m zentao_tool.cli verify records\manifests\2026-07-formal_auto.json
 ```
 
-Place `--env test`, `--env formal_external`, or another global option before the subcommand.
+The default `formal_auto` probes the formal intranet first and uses the formal external endpoint when intranet access is unavailable. Selection happens before a command; never switch endpoints halfway through an upload. Place `--env test`, `--env formal_external`, or another global option before the subcommand. Use `test` only when the user explicitly requests or is authorized for the test system.
+
+Read [references/prompt-examples.md](references/prompt-examples.md) when recommending a new-session prompt. Read [references/evidence-sources.md](references/evidence-sources.md) when Codex records are absent or another AI coding tool supplied the evidence.
 
 For a partial trial, create a separate draft containing only the approved records and use a separate manifest. Never reuse the full-month manifest for a subset upload.
 
