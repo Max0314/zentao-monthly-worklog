@@ -78,7 +78,7 @@ The default `formal_auto` probes the formal intranet first and uses the formal e
 - Treat `bug_candidates` as an index, not content ready for upload. Do not draft template resolution steps for unsupported candidates.
 - Preserve source hashes from the baseline instead of repeatedly rediscovering them.
 
-Read [references/prompt-examples.md](references/prompt-examples.md) when recommending a new-session prompt. Read [references/evidence-sources.md](references/evidence-sources.md) when Codex records are absent or another AI coding tool supplied the evidence.
+Read [references/prompt-examples.md](references/prompt-examples.md) when recommending a new-session prompt. Read [references/evidence-sources.md](references/evidence-sources.md) when Codex records are absent or another AI coding tool supplied the evidence. Read [references/mcp-tools.md](references/mcp-tools.md) when a ZenTao MCP server is already connected in the session and read-only `zentao_*` tools could resolve execution ids, check for duplicate titles, inspect an existing Bug, or cross-check an upload; those tools never replace `upload` or `verify`.
 
 For a partial trial, create a separate draft containing only the approved records and use a separate manifest. Never reuse the full-month manifest for a subset upload.
 
