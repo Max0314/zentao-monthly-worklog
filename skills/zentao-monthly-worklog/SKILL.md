@@ -78,7 +78,7 @@ The default `formal_auto` probes the formal intranet first and uses the formal e
 - Treat `bug_candidates` as an index, not content ready for upload. Do not draft template resolution steps for unsupported candidates.
 - Preserve source hashes from the baseline instead of repeatedly rediscovering them.
 
-Read [references/prompt-examples.md](references/prompt-examples.md) when recommending a new-session prompt. Read [references/evidence-sources.md](references/evidence-sources.md) when Codex records are absent or another AI coding tool supplied the evidence. Read [references/mcp-tools.md](references/mcp-tools.md) when a ZenTao MCP server is already connected in the session and read-only `zentao_*` tools could resolve execution ids, check for duplicate titles, inspect an existing Bug, or cross-check an upload; those tools never replace `upload` or `verify`.
+Read [references/prompt-examples.md](references/prompt-examples.md) when recommending a new-session prompt. Read [references/evidence-sources.md](references/evidence-sources.md) when Codex records are absent or another AI coding tool supplied the evidence. Read [references/mcp-tools.md](references/mcp-tools.md) when a ZenTao MCP server is already connected in the session and its tools could resolve execution ids, check for a duplicate title, inspect an existing Bug, or cross-check an upload. The `zentao_*` composite tools only read, but the MCP also exposes endpoint tools that create and modify records; neither replaces `upload` or `verify`.
 
 For a partial trial, create a separate draft containing only the approved records and use a separate manifest. Never reuse the full-month manifest for a subset upload.
 
@@ -91,6 +91,7 @@ For a partial trial, create a separate draft containing only the approved record
 - The manifest is bound to the test/formal target, account, month, and per-record content hash. Never bypass a mismatch.
 - Before resuming, the uploader reconciles expected comment hashes with the server's actual `actions` list.
 - Read [references/upload-compatibility.md](references/upload-compatibility.md) before changing client, comment, authentication, resume, or verification behavior.
+- Never create a monthly record through a connected ZenTao MCP. Its endpoint tools can create a story, task or Bug, but ZenTao v1 has no comment endpoint, so such a record carries no `【任务完成步骤】` or `【bug解决步骤】` history and earns no AI score. Everything belonging to the month's record set goes through `upload`. If the user explicitly asks for a single ad hoc record through the MCP, create it only after saying plainly that it will have no comments and no AI score.
 
 ## Failure Handling
 
