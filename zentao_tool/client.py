@@ -5,7 +5,7 @@ import urllib.error
 import urllib.request
 
 
-DEFAULT_BASE_WEB = "http://10.70.33.19/biz"
+DEFAULT_BASE_WEB = "http://10.70.33.19"
 DEFAULT_BASE_API = DEFAULT_BASE_WEB + "/api.php/v1"
 
 

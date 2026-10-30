@@ -41,6 +41,7 @@ def _settings(args, require_password=True, network=False):
         probe_settings = replace(settings, timeout=min(settings.timeout, 5))
         try:
             ZentaoClient.from_settings(probe_settings).ping()
+            ZentaoWebComments.from_settings(probe_settings).check_web_entry()
             return settings
         except Exception as exc:
             failures.append(f"{settings.environment_name}: {type(exc).__name__}")
@@ -218,6 +219,7 @@ def main(argv=None):
         client = ZentaoClient.from_settings(settings)
         client.ping()
         web = ZentaoWebComments.from_settings(settings, token=client.token)
+        web.authenticate()
         probe = settings.comment_probe
         if probe:
             web.get_comment_form(probe["type"], int(probe["id"]))

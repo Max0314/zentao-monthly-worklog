@@ -113,13 +113,52 @@ class CliSettingsTests(unittest.TestCase):
                     if self.environment_name == "formal_internal":
                         raise OSError("unreachable")
 
+                def check_web_entry(self):
+                    pass
+
             with patch(
                 "zentao_tool.client.ZentaoClient.from_settings",
+                side_effect=lambda settings: Probe(settings.environment_name),
+            ), patch(
+                "zentao_tool.cli.ZentaoWebComments.from_settings",
                 side_effect=lambda settings: Probe(settings.environment_name),
             ):
                 settings = _settings(args, network=True)
 
             self.assertEqual(settings.requested_environment_name, "formal_auto")
+            self.assertEqual(settings.environment_name, "formal_external")
+
+    def test_network_selection_rejects_http_200_error_page(self):
+        with tempfile.TemporaryDirectory() as temp:
+            config = Path(temp) / "config.local.json"
+            config.write_text(json.dumps({
+                "active_environment": "formal_auto",
+                "account": "user",
+                "password": "pass",
+                "environments": {
+                    "formal_internal": {"base_url": "http://internal.invalid"},
+                    "formal_external": {"base_url": "https://external.example.com"},
+                },
+            }), encoding="utf-8")
+            args = argparse.Namespace(config=str(config), environment=None)
+
+            class RestProbe:
+                def ping(self):
+                    pass
+
+            class WebProbe:
+                def __init__(self, name):
+                    self.name = name
+
+                def check_web_entry(self):
+                    if self.name == "formal_internal":
+                        raise RuntimeError("ZenTao web entry is not a login page")
+
+            with patch("zentao_tool.client.ZentaoClient.from_settings", return_value=RestProbe()), patch(
+                "zentao_tool.cli.ZentaoWebComments.from_settings",
+                side_effect=lambda settings: WebProbe(settings.environment_name),
+            ):
+                settings = _settings(args, network=True)
             self.assertEqual(settings.environment_name, "formal_external")
 
 

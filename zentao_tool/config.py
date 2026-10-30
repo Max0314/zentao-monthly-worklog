@@ -83,7 +83,7 @@ def _build_settings(
 
     env = environments[environment_name]
     base_url = str(env["base_url"]).rstrip("/")
-    path_prefix = str(env.get("path_prefix", "/biz")).strip()
+    path_prefix = str(env.get("path_prefix", "")).strip()
     if path_prefix and not path_prefix.startswith("/"):
         path_prefix = "/" + path_prefix
     base_web = (base_url + path_prefix).rstrip("/")

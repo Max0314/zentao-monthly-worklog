@@ -3,7 +3,7 @@ import os
 import urllib.request
 
 
-BASE_API = "http://10.70.33.19/biz/api.php/v1"
+BASE_API = "http://10.70.33.19/api.php/v1"
 ACCOUNT = os.environ.get("ZENTAO_ACCOUNT", "")
 PASSWORD = os.environ.get("ZENTAO_PASSWORD", "")
 

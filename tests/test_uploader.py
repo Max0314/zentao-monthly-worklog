@@ -97,6 +97,10 @@ class FakeWeb:
     def __init__(self, client):
         self.client = client
         self.comments = []
+        self.authenticated = False
+
+    def authenticate(self):
+        self.authenticated = True
 
     def add_comment(self, object_type, object_id, text):
         self.comments.append((object_type, object_id, text))
@@ -106,6 +110,27 @@ class FakeWeb:
 
 
 class UploaderTests(unittest.TestCase):
+    def test_web_auth_failure_precedes_record_creation(self):
+        draft = {
+            "month": "2026-07", "date": "2026-07-14", "stories": [],
+            "tasks": [{"execution": 1, "title": "T", "detail": "【任务详细描述】D",
+                       "comments": ["【任务完成步骤】1", "【任务完成步骤】2", "【任务完成步骤】3"]}],
+            "bugs": [],
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            uploader = BatchUploader(FakeSettings(), Path(temp) / "manifest.json")
+
+            class Client(FakeClient):
+                def create_task(self, *_args, **_kwargs):
+                    raise AssertionError("record must not be created")
+
+            uploader.client = Client()
+            uploader.web = FakeWeb(uploader.client)
+            uploader.web.authenticate = lambda: (_ for _ in ()).throw(RuntimeError("web login failed"))
+            with self.assertRaisesRegex(RuntimeError, "web login failed"):
+                uploader.upload(draft)
+            self.assertEqual(uploader.manifest["entries"], [])
+
     def test_comment_normalization_preserves_pseudocode_placeholders(self):
         plain = "【伪代码】if score < 5: emit(<value>)"
         html = "<p>【伪代码】if score &lt; 5:<br>emit(&lt;value&gt;)</p>"
@@ -131,6 +156,7 @@ class UploaderTests(unittest.TestCase):
                 ["story_created", "done", "resolved"],
             )
             self.assertEqual(len(uploader.web.comments), 10)
+            self.assertTrue(uploader.web.authenticated)
             self.assertEqual(uploader.web.comments[0], ("story", 301, "story comment"))
             self.assertTrue(manifest.exists())
 

@@ -11,10 +11,10 @@ from zentao_tool.config import CONFIG_TEMPLATE_PATH, load_settings, load_setting
 class ConfigTests(unittest.TestCase):
     def test_packaged_template_matches_repository_example(self):
         repository_example = Path(__file__).resolve().parents[1] / "config.example.json"
-        self.assertEqual(
-            json.loads(CONFIG_TEMPLATE_PATH.read_text(encoding="utf-8")),
-            json.loads(repository_example.read_text(encoding="utf-8")),
-        )
+        template = json.loads(CONFIG_TEMPLATE_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(template, json.loads(repository_example.read_text(encoding="utf-8")))
+        for name in ("formal_internal", "formal_external"):
+            self.assertEqual(template["environments"][name]["path_prefix"], "")
 
     def test_local_config_has_precedence_over_stale_environment(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -67,6 +67,8 @@ class ConfigTests(unittest.TestCase):
                 ["formal_internal", "formal_external"],
             )
             self.assertTrue(all(item.requested_environment_name == "formal_auto" for item in candidates))
+            self.assertEqual(candidates[0].base_web, "http://10.0.0.1")
+            self.assertEqual(candidates[1].base_api, "https://zentao.example.com/api.php/v1")
 
     def test_environment_can_override_scope_mappings(self):
         with tempfile.TemporaryDirectory() as temp:

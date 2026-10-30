@@ -18,6 +18,12 @@ Use the installed `zentao_tool` Python package as the deterministic collection a
 4. Configure confirmed mappings with `python -m zentao_tool.cli configure-execution <alias> <execution-id> <name> <product-id> --repository <pattern> [--project-id <id>]`. Use `--env test` before the command when test ZenTao uses different IDs; environment mappings override global mappings.
 5. Never copy another user's execution, product, project, repository, or Git-author mappings into a new user's configuration.
 
+## ZenTao Addresses
+
+- Formal intranet: `http://10.70.33.19/`; formal internet: `https://itms.changhongnetwork.net:28443/`. Both Web pages and `/api.php/v1` now start at the site root. Do not append `/biz` to formal links or comment endpoints.
+- Existing per-user configs may still contain `path_prefix: "/biz"` or a `/biz/api.php/v1` override. Inspect the selected environment with `show-config`; update only the formal internal/external entries to `path_prefix: ""` and a root API path. Keep the test environment's independently verified routing unchanged.
+- HTTP 200 alone is not proof that a route works: the retired `/biz/user-login.html` serves a 200 `illegal` page. Run `ping` for the exact upload environment and require a real Web login, as well as REST access, before record creation. Build UI links from the verified `base_web`, not from a remembered `/biz` URL.
+
 ## Workflow
 
 1. Run `python -m zentao_tool.cli show-config` and confirm the selected user configuration and workspace.
@@ -29,7 +35,7 @@ Use the installed `zentao_tool` Python package as the deterministic collection a
    - Do not open every detail file or repeatedly parse the evidence with many small shell commands.
    - When a fact needs confirmation, batch the relevant sessions into one `inspect-evidence` call. Keep the default 30,000-character budget or lower; normally inspect no more than 2-6 sessions per business objective.
 4. Run `python -m zentao_tool.cli draft output/YYYY-MM/evidence.json` for a baseline. Entries in `bug_candidates` are not resolved Bugs; promote only candidates supported by symptom, diagnosis/fix, and validation evidence. Fix-like commits remain in the baseline task sources so unsupported Bug candidates still have a task fallback. Remove duplicate source coverage when promoting one to a Bug. Rewrite `output/YYYY-MM/draft.json` once after decisions are settled; avoid placeholder records and repeated whole-file patches.
-5. Run `validate` and `preview`. Show the complete proposed story/task/bug list to the user before any upload unless the user explicitly authorized the complete list in the current request.
+5. Run `validate` and `preview`. Show the complete proposed story/task/bug list to the user before any upload unless the user explicitly authorized the complete list in the current request. If the user requests dedicated executions, confirm project ownership and read back each created execution ID; do not silently reuse a technically related platform's execution.
 6. After confirmation, run `upload` with `formal_auto` or an explicit environment and a dedicated manifest. Do not replace this command with ad hoc REST calls; it writes each scoreable comment separately and persists resume state.
 7. Run `verify --wait-ai-score 180 --require-ai-score` against the generated manifest when scoring is required. Treat the upload as successful only when titles, final task/Bug statuses, expected comment hashes, duplicate counts, and scores match.
 
@@ -49,6 +55,8 @@ Use the installed `zentao_tool` Python package as the deterministic collection a
 ## Content Rules
 
 For each task, provide `title`, a `detail` beginning with `【任务详细描述】`, and 3-8 independent comments beginning with `【任务完成步骤】`.
+
+Write each comment as a substantive business work note: identify the affected workflow or symptom, the evidence used to locate it, the concrete change, or the verification and remaining boundary. Keep these as separate chronological actions; avoid generic one-line claims such as “优化完成” or invented test/production results.
 
 For each bug, provide a title stating component, symptom, and impact; a `detail` beginning with `【bug详细描述】`; separate `【bug解决步骤】` comments for verification, location, analysis, fix, and regression validation; and an independent `【伪代码】` comment.
 

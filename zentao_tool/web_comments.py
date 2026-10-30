@@ -9,7 +9,7 @@ import urllib.parse
 import urllib.request
 
 
-DEFAULT_BASE_WEB = "http://10.70.33.19/biz"
+DEFAULT_BASE_WEB = "http://10.70.33.19"
 
 
 class ZentaoWebComments:
@@ -33,6 +33,7 @@ class ZentaoWebComments:
         self._token = token
         self._token_provider = token_provider
         self._web_authenticated = False
+        self._web_entry_checked = False
         self.cookie_jar = http.cookiejar.CookieJar()
         handlers = []
         handlers.append(urllib.request.HTTPCookieProcessor(self.cookie_jar))
@@ -84,9 +85,31 @@ class ZentaoWebComments:
         headers.update(extra)
         return headers
 
+    def check_web_entry(self):
+        if self._web_entry_checked:
+            return
+        login_url = self.base_web + "/user-login.html"
+        req = urllib.request.Request(
+            login_url,
+            headers={"User-Agent": "Mozilla/5.0"},
+            method="GET",
+        )
+        with self.opener.open(req, timeout=self.timeout) as response:
+            body = response.read().decode("utf-8", errors="replace")
+        if "loginForm" not in body or "password" not in body:
+            raise RuntimeError(
+                "ZenTao web entry is not a login page; check base_web/path_prefix"
+            )
+        self._web_entry_checked = True
+
+    def authenticate(self):
+        self._ensure_web_login()
+
     def _ensure_web_login(self):
         if self._web_authenticated:
             return
+
+        self.check_web_entry()
 
         login_url = self.base_web + "/user-login.html"
         origin_parts = urllib.parse.urlsplit(self.base_web)
@@ -101,10 +124,6 @@ class ZentaoWebComments:
             "Referer": login_url,
             "Origin": origin,
         }
-        login_page = urllib.request.Request(login_url, headers=browser_headers, method="GET")
-        with self.opener.open(login_page, timeout=self.timeout):
-            pass
-
         random_url = self.base_web + "/user-refreshRandom.html"
         random_req = urllib.request.Request(random_url, headers=browser_headers, method="GET")
         with self.opener.open(random_req, timeout=self.timeout) as response:

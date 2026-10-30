@@ -80,9 +80,11 @@ python -m zentao_tool.cli --env test configure-execution review 2708 "测试代�
 
 默认环境是 `formal_auto`：
 
-1. 先探测正式禅道内网 `http://10.70.33.19/biz`。
-2. 内网不可达时自动改用正式禅道外网 `https://itms.changhongnetwork.net:28443/biz`。
+1. 先探测正式禅道内网 `http://10.70.33.19/`。
+2. 内网不可达时自动改用正式禅道外网 `https://itms.changhongnetwork.net:28443/`。
 3. 只在命令开始前选择一次地址；写入过程中不会切换，避免在网络抖动时重复创建数据。
+
+正式禅道网页和 REST API 均在站点根路径；不要给正式地址追加 `/biz`。旧配置若含 `environments.formal_internal.path_prefix` 或 `environments.formal_external.path_prefix` 为 `/biz`，请改成空字符串；测试环境按实际部署单独配置。`ping` 会检查网页会话，不能只凭 HTTP 200 判断路径可用（旧 `/biz` 会返回 200 错误页）。
 
 陈鹏列或获授权的测试人员可显式选择测试禅道：
 

@@ -11,6 +11,7 @@ Use these rules for the current ZenTao Biz 12.3 environments.
 ## Scoreable comments
 
 - REST `Token` authentication is sufficient for v1 record APIs but is not sufficient for the web comment POST.
+- On the formal system, `base_web` is the site root on both intranet and internet. A legacy `/biz` URL can return HTTP 200 with an `illegal` page; check the actual login form and authenticate before creating any records.
 - Establish a ZenTao Web session first: load the login page, request `user-refreshRandom.html`, submit the double-MD5 password with browser headers, and retain the returned cookies.
 - Post each comment independently to `/action-comment-{story|task|bug}-{id}.html` with `actioncomment` and `uid`.
 - Include the Web session cookies plus realistic `Origin`, `Referer`, `User-Agent`, and `X-Requested-With` headers.

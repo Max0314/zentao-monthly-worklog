@@ -276,6 +276,7 @@ class BatchUploader:
         if errors:
             raise ValueError("Draft validation failed:\n- " + "\n- ".join(errors))
         self._bind_manifest(draft)
+        self.web.authenticate()
 
         for object_type in OBJECT_TYPES:
             for record in draft.get(object_type, []):

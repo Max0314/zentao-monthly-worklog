@@ -12,13 +12,13 @@
   "environments": {
     "formal_external": {
       "base_url": "https://itms.changhongnetwork.net:28443",
-      "path_prefix": "/biz",
+      "path_prefix": "",
       "verify_tls": true,
       "timeout": 30
     },
     "formal_internal": {
       "base_url": "http://10.70.33.19",
-      "path_prefix": "/biz",
+      "path_prefix": "",
       "verify_tls": true,
       "timeout": 30
     },
