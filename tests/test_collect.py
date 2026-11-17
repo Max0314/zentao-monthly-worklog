@@ -83,6 +83,23 @@ class CollectTests(unittest.TestCase):
             repositories = collect_git_history(Path("."), "2026-07")
         self.assertEqual([item["hash"] for item in repositories[0]["commits"]], ["inside"])
 
+    def test_git_history_skips_invalid_repository_marker(self):
+        invalid = Path("invalid")
+        valid = Path("valid")
+        output = "\x1ecommit\x1f2026-10-01T09:00:00+08:00\x1fUser\x1fu@example.com\x1ffeat: kept\n"
+        with patch("zentao_tool.collect.discover_git_repositories", return_value=[invalid, valid]), patch(
+            "zentao_tool.collect._run_git", side_effect=[RuntimeError("not a git repository"), output]
+        ), patch("zentao_tool.collect._is_git_repository", return_value=False):
+            repositories = collect_git_history(Path("."), "2026-10")
+        self.assertEqual([item["name"] for item in repositories], ["valid"])
+
+    def test_git_history_does_not_hide_error_in_valid_repository(self):
+        with patch("zentao_tool.collect.discover_git_repositories", return_value=[Path("valid")]), patch(
+            "zentao_tool.collect._run_git", side_effect=RuntimeError("permission denied")
+        ), patch("zentao_tool.collect._is_git_repository", return_value=True):
+            with self.assertRaisesRegex(RuntimeError, "permission denied"):
+                collect_git_history(Path("."), "2026-10")
+
     def test_collects_generic_jsonl_context(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "neocoder.jsonl"

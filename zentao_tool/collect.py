@@ -445,6 +445,20 @@ def _run_git(repo: Path, args: list[str]) -> str:
     return result.stdout
 
 
+def _is_git_repository(repo: Path) -> bool:
+    result = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=repo,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    return result.returncode == 0 and result.stdout.strip() == "true"
+
+
 def collect_git_history(
     root: Path,
     month: str,
@@ -455,18 +469,23 @@ def collect_git_history(
     author_filters = [item.lower() for item in (authors or [])]
     repositories = []
     for repo in discover_git_repositories(root):
-        output = _run_git(
-            repo,
-            [
-                "log",
-                f"--since={since}",
-                f"--until={until}",
-                "--no-merges",
-                "--date=iso-strict",
-                "--format=%x1e%H%x1f%aI%x1f%an%x1f%ae%x1f%s",
-                "--name-status",
-            ],
-        )
+        try:
+            output = _run_git(
+                repo,
+                [
+                    "log",
+                    f"--since={since}",
+                    f"--until={until}",
+                    "--no-merges",
+                    "--date=iso-strict",
+                    "--format=%x1e%H%x1f%aI%x1f%an%x1f%ae%x1f%s",
+                    "--name-status",
+                ],
+            )
+        except RuntimeError as exc:
+            if "not a git repository" in str(exc).lower() and not _is_git_repository(repo):
+                continue
+            raise
         commits = []
         for block in output.split("\x1e"):
             block = block.strip()

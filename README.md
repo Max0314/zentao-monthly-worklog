@@ -121,6 +121,7 @@ python -m zentao_tool.cli verify records\manifests\2026-07-formal_auto.json `
 - 完整的用户消息与最终答复保存在 `details/sessions/`，不会丢失。
 - 会话按每条消息在配置时区中的月份归档，跨月长会话不会因起始目录不同而漏采或串月。
 - Git 提交在采集阶段按 commit hash 去重，同一仓库的多个 worktree 自动归并。
+- 遇到残留 `.git` 标记但已不是有效仓库的目录时跳过；有效仓库的权限或读取错误继续报错。
 - `draft` 中的 `bug_candidates` 只是待核实索引，不会再把所有 `fix:` 提交伪装成已解决 Bug；对应提交仍保留在任务基线中，避免未晋级 Bug 时工作消失。
 
 需要核实具体上下文时，使用一次有字符预算的 `inspect-evidence`，不要让 Agent 逐个打开所有会话。只有明确进行取证或调试时才使用 `collect --full`。
